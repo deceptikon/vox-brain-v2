@@ -1,0 +1,24 @@
+[project]
+name = "vox-brain-v2"
+version = "0.1.0"
+description = "VOX Brain v2 - Symbolic RAG with pgvector"
+readme = "README.md"
+authors = [
+    { name = "Medvedev", email = "lexx.kg@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "pytest>=8.0.0",
+    "pydantic>=2.0.0",
+    "tree-sitter>=0.21.3",
+    "tree-sitter-python>=0.21.0",
+    "tree-sitter-typescript>=0.21.0",
+    "ollama>=0.6.1",
+    "psycopg[binary]>=3.1.18",
+    "pgvector>=0.2.5",
+    "python-dotenv>=1.0.1",
+]
+
+[build-system]
+requires = ["uv_build>=0.9.26,<0.10.0"]
+build-backend = "uv_build"
