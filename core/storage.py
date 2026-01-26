@@ -15,7 +15,7 @@ class Storage:
 
         # Table name for symbols; configurable by parameter or SYMBOLS_TABLE env var
         # Default: symbols_v2
-        self.table_name = table_name or os.getenv("SYMBOLS_TABLE", "symbols_v2")
+        self.table_name = table_name or os.getenv("SYMBOLS_TABLE", "symbols")
 
         self.dbname = os.getenv("SQL_DATABASE", "tamga_local")
         self.user = os.getenv("SQL_USER", "tamga_user")

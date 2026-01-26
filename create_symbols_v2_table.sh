@@ -56,9 +56,20 @@ CREATE TABLE symbols_v2 (
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_class WHERE relname = 'symbols') THEN
-    EXECUTE 'INSERT INTO symbols_v2 (project_id, name, symbol_type, file_path, start_line, end_line, code, docstring, parent_name, embedding, created_at) SELECT project_id, name, symbol_type, file_path, start_line, end_line, code, docstring, parent_name, embedding, created_at FROM symbols';
+    EXECUTE '
+      INSERT INTO symbols_v2 (
+        project_id, name, symbol_type, file_path, start_line,
+        end_line, code, docstring, parent_name, embedding, created_at
+      )
+      SELECT DISTINCT ON (s.project_id, s.file_path, s.start_line, s.end_line) -- Выбираем только уникальные комбинации ключей
+        COALESCE(s.project_id, ''default_project''),
+        s.name, s.symbol_type, s.file_path, s.start_line,
+        s.end_line, s.code, s.docstring, s.parent_name, s.embedding, s.created_at
+      FROM symbols s
+      ORDER BY s.project_id, s.file_path, s.start_line, s.end_line, s.created_at DESC; -- Определяем, какую строку из дубликатов оставить (самую свежую)
+      ';
   END IF;
-END$$;
+END $$;
 
 -- Indexes (ivfflat for pgvector; may require tuning for large tables)
 CREATE INDEX IF NOT EXISTS symbols_v2_embedding_idx ON symbols_v2 USING ivfflat (embedding vector_cosine_ops);
