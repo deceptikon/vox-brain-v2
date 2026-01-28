@@ -1,0 +1,215 @@
+# --- VOX Unified Command Set ---
+
+# Group for managing projects
+project:
+  # Replaces 'vox init'
+  create:
+    description: "Register a new project from a local path and get a project_id."
+    parameters:
+      - name: path
+        type: string
+        required: true
+        description: "Absolute path to the project's root directory."
+      - name: name
+        type: string
+        required: false
+        description: "A friendly name for the project. Defaults to the directory name."
+    cli_alias: "vox project create <path> [name]"
+  # Replaces 'vox list'
+  list:
+    description: "List all registered projects and their IDs."
+    parameters: []
+    cli_alias: "vox project list"
+  # New command for cleanup
+  delete:
+    description: "De-register a project and delete all its associated indexed data."
+    parameters:
+      - name: project_id
+        type: string
+        required: true
+        description: "The unique ID of the project to delete."
+    cli_alias: "vox project delete <project_id>"
+  # Replaces 'vox stats'
+  stats:
+    description: "Show statistics for a project's indexes (number of files, symbols, etc.)."
+    parameters:
+      - name: project_id
+        type: string
+        required: true
+        description: "The unique ID of the project."
+    cli_alias: "vox project stats <project_id>"
+
+# Group for building and maintaining search indexes
+index:
+  # Replaces 'sync-v', 'sync-v2', 'reindex'
+  build:
+    description: "Build or rebuild the search indexes for a project."
+    parameters:
+      - name: project_id
+        type: string
+        required: true
+        description: "The unique ID of the project to index."
+      - name: type
+        type: string
+        enum: [semantic, symbolic, all]
+        default: all
+        description: "The type of index to build. 'semantic' for vector search, 'symbolic' for code symbols."
+      - name: force
+        type: boolean
+        default: false
+        description: "If true, forces a full re-index, deleting existing data first."
+    cli_alias: "vox index build <project_id> [--type=all] [--force]"
+  # Replaces 'update' and 'sync_project_v2'
+  update:
+    description: "Incrementally update indexes with recent changes (e.g., from git history or new files)."
+    parameters:
+      - name: project_id
+        type: string
+        required: true
+        description: "The unique ID of the project to update."
+    cli_alias: "vox index update <project_id>"
+
+# Group for searching
+search:
+  # Replaces 'search-v'
+  semantic:
+    description: "Perform a vector-based semantic search for concepts and natural language queries."
+    parameters:
+      - name: query
+        type: string
+        required: true
+        description: "The natural language search query."
+      - name: project_id
+        type: string
+        required: false
+        description: "Optional. Searches within a specific project. If omitted, searches across all projects."
+      - name: limit
+        type: integer
+        default: 10
+        description: "Number of results to return."
+    cli_alias: "vox search semantic <query> [--project-id <id>]"
+  # Replaces 'search-v2'
+  symbolic:
+    description: "Perform a hybrid search for code symbols (functions, classes, variables, etc.)."
+    parameters:
+      - name: query
+        type: string
+        required: true
+        description: "The name of the symbol or a concise description of it."
+      - name: project_id
+        type: string
+        required: false
+        description: "Optional. Searches within a specific project. If omitted, searches across all projects."
+      - name: limit
+        type: integer
+        default: 10
+        description: "Number of results to return."
+    cli_alias: "vox search symbolic <query> [--project-id <id>]"
+  # New 'smart' search
+  auto:
+    description: "Perform an automatic 'best-effort' search using the most appropriate engine for the query."
+    parameters:
+      - name: query
+        type: string
+        required: true
+        description: "The search query."
+      - name: project_id
+        type: string
+        required: false
+        description: "Optional. The ID of the project to search within."
+    cli_alias: "vox search <query> [--project-id <id>]"
+
+# Group for interacting with the AI
+ask:
+  # Replaces 'ask-v'
+  question:
+    description: "Ask a question about the codebase, using RAG to provide a comprehensive answer."
+    parameters:
+      - name: question
+        type: string
+        required: true
+        description: "The question to ask about the code."
+      - name: project_id
+        type: string
+        required: true
+        description: "The ID of the project your question is about."
+      - name: model
+        type: string
+        required: false
+        description: "Optional. Specify the language model to use for generating the answer."
+      - name: reset_history
+        type: boolean
+        default: false
+        description: "If true, starts a new conversation, ignoring previous turns."
+    cli_alias: "vox ask <question> --project-id <id>"
+
+# Group for managing project-specific documentation (rules, notes, etc.)
+docs:
+  # Replaces 'add-doc', 'add-file'
+  add:
+    description: "Add a documentation snippet to a project from a string or file."
+    parameters:
+      - name: project_id
+        type: string
+        required: true
+      - name: content
+        type: string
+        required: false
+        description: "The text content of the document."
+      - name: from_file
+        type: string
+        required: false
+        description: "Path to a file to be added as a document."
+      - name: type
+        type: string
+        enum: [rule, note, doc]
+        default: note
+        description: "The type of the document."
+      - name: title
+        type: string
+        required: false
+        description: "A title for the document."
+    cli_alias: "vox docs add --project-id <id> --content '...' [--type note]"
+  # Replaces 'list-docs'
+  list:
+    description: "List all documentation snippets for a project."
+    parameters:
+      - name: project_id
+        type: string
+        required: true
+    cli_alias: "vox docs list <project_id>"
+  # Replaces 'get-docs' (partially) and adds ability to get one doc
+  get:
+    description: "Get the content of a specific documentation snippet."
+    parameters:
+      - name: project_id
+        type: string
+        required: true
+      - name: doc_id
+        type: string
+        required: true
+        description: "The unique ID of the document to retrieve."
+    cli_alias: "vox docs get <doc_id> --project-id <id>"
+  # Replaces 'rm-doc'
+  delete:
+    description: "Delete a documentation snippet."
+    parameters:
+      - name: project_id
+        type: string
+        required: true
+      - name: doc_id
+        type: string
+        required: true
+        description: "The unique ID of the document to delete."
+    cli_alias: "vox docs delete <doc_id> --project-id <id>"
+
+# New group for server management
+server:
+  start:
+    description: "Start the VOX MCP server in the foreground."
+    parameters: []
+    cli_alias: "vox server start"
+  status:
+    description: "Check the status of the VOX MCP server."
+    parameters: []
+    cli_alias: "vox server status"

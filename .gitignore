@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.python-version
+
+# VOX Data
+.vox_brain/
+.rag_db/
+context/
+*.db
+*.sqlite3
+.env
+
+# IDE
+.vscode/
+.idea/
+.cursor/
+
+# Builds
+dist/
+build/
+*.egg-info/

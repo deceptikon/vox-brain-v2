@@ -1,0 +1,23 @@
+layers:
+  semantic:
+    type: "vector"
+    provider: "chromadb"
+    description: "Stores embeddings of text chunks for natural language search."
+    path_relative: ".rag_db" # Relative to project root
+    collection_prefix: "vox_sem_"
+    enabled: true
+
+  symbolic:
+    type: "relational_vector"
+    provider: "postgres"
+    description: "Stores code symbols (AST) and their embeddings for structural search."
+    table_name: "symbols_unified"
+    connection_env_prefix: "SQL_"
+    enabled: true
+
+  context:
+    type: "key_value"
+    provider: "jsonl" # Or simple file system
+    description: "Stores project rules, docs, and notes."
+    path_relative: ".vox/docs"
+    enabled: true
