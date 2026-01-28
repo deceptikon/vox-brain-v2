@@ -22,6 +22,7 @@ dependencies = [
     "requests>=2.32.0",
     "python-dotenv>=1.0.1",
     "makefun>=1.15.0",
+    "aiofiles>=25.1.0",
 ]
 
 [project.scripts]

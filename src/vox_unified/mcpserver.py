@@ -12,7 +12,7 @@ from vox_unified.manager import VoxManager
 manager = VoxManager()
 
 # Initialize MCP
-mcp = FastMCP("VOX Unified", dependencies=["chromadb", "psycopg", "pgvector", "ollama"])
+mcp = FastMCP("VOX Unified", dependencies=["psycopg", "pgvector", "ollama", "sqlite3"])
 
 # Load Config
 CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "commands.yaml"
@@ -27,7 +27,6 @@ TYPE_MAP = {
 }
 
 def create_mcp_wrapper(func_name, method, help_text, params_config):
-    # Construct signature for FastMCP (Pydantic validation under hood)
     parameters = []
     for param in params_config:
         name = param["name"].replace("-", "_")
@@ -37,10 +36,9 @@ def create_mcp_wrapper(func_name, method, help_text, params_config):
         default_val = param.get("default")
         is_required = param.get("required", False)
         
-        # FastMCP uses standard Python typing for validation
         if not is_required:
             annotation = Optional[py_type]
-            default = default_val # Can be None
+            default = default_val
         else:
             annotation = py_type
             default = inspect.Parameter.empty
@@ -55,41 +53,28 @@ def create_mcp_wrapper(func_name, method, help_text, params_config):
 
     sig = inspect.Signature(parameters)
 
-    # Wrapper must be async for FastMCP best practice, though sync works too.
-    # We'll make it async and call the sync manager method.
     async def wrapper(**kwargs):
-        # We might need to handle output capture since Manager prints to stdout for CLI
-        # But for now, we just return the result of the method if it returns something,
-        # or capture stdout if it doesn't.
-        # Manager methods generally print. Ideally Manager should return objects/strings.
-        # We modified Manager to return values in some cases (ask_question).
-        # For others, we might just return "Command executed."
-        
         try:
             result = method(**kwargs)
             if result is not None:
                 return str(result)
-            return "Command executed successfully (check logs/stdout for details)."
+            return "Command executed successfully."
         except Exception as e:
             return f"Error: {e}"
 
-    # Create dynamic function
     dynamic_func = create_function(sig, wrapper, func_name=func_name, doc=help_text)
     return dynamic_func
 
 
-# Register Tools
+# Register Tools from YAML
 for group_name, commands in COMMANDS_CONFIG.items():
-    # We skip 'server' group for MCP tools usually, as you don't start server from within server
-    if group_name == "server":
-        continue
+    if group_name == "server": continue
 
     for cmd_name, cmd_config in commands.items():
         tool_name = f"{group_name}_{cmd_name}"
         method_name = f"{group_name}_{cmd_name}"
         
-        if not hasattr(manager, method_name):
-            continue
+        if not hasattr(manager, method_name): continue
             
         method = getattr(manager, method_name)
         
@@ -102,11 +87,42 @@ for group_name, commands in COMMANDS_CONFIG.items():
         
         mcp.tool(name=tool_name)(wrapper)
 
-# Resources?
-# We can statically define resources or map them if we had a config for resources.
-# For now, we'll keep the static resources from previous implementation if needed, 
-# but per request we strictly follow YAML command set for tools.
-# Resources are strictly read-only access points, distinct from commands.
+# --- MCP Resources & Prompts ---
+
+@mcp.resource("vox://{project_id}/skeleton/{file_path}")
+def get_skeleton(project_id: str, file_path: str) -> str:
+    """Read a lightweight skeleton of a file (signatures only)."""
+    return manager.get_file_skeleton(project_id, file_path)
+
+@mcp.resource("vox://{project_id}/tree")
+def get_tree(project_id: str) -> str:
+    """Get the full file tree of the project."""
+    return manager.get_project_tree(project_id)
+
+@mcp.prompt("onboard")
+def onboard_prompt(project_id: str) -> str:
+    """
+    Helps an Agent understand the project structure and rules immediately.
+    """
+    tree = manager.get_project_tree(project_id)
+    # Get rules from SQLite
+    docs = manager.datalayer.local.list_documents(project_id)
+    rules = [d['content'] for d in docs if d['type'] == 'rule']
+    rules_text = "\n".join(rules) if rules else "No specific rules defined."
+    
+    return f"""
+    You are onboarding to Project ID: {project_id}.
+    
+    ### PROJECT STRUCTURE
+    {tree}
+    
+    ### PROJECT RULES
+    {rules_text}
+    
+    ### INSTRUCTIONS
+    1. Use 'search_symbolic' to find code definitions.
+    2. Use 'vox://{project_id}/skeleton/path/to/file' to read file interfaces.
+    """
 
 def run():
     mcp.run()

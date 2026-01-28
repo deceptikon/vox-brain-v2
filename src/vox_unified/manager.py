@@ -1,14 +1,17 @@
 import os
 import uuid
-from typing import Optional, List
+import json
+from typing import Optional, List, Dict, Any
 from vox_unified.gatherer import Gatherer
 from vox_unified.datalayer import DataLayer
 from vox_unified.embeddings import get_ollama_embedding
+from vox_unified.middleware import CacheLayer, TransformerLayer
 
 class VoxManager:
     def __init__(self):
         self.datalayer = DataLayer()
         self.gatherer = Gatherer()
+        self.cache = CacheLayer(self.datalayer.local.db_path)
 
     # --- PROJECT ---
     def project_create(self, path: str, name: Optional[str] = None):
@@ -43,10 +46,34 @@ class VoxManager:
     def project_delete(self, project_id: str):
         self.datalayer.local.delete_project(project_id)
         self.datalayer.vector.delete_project_data(project_id)
+        self.cache.invalidate(project_id)
         print(f"✅ Deleted project {project_id}")
 
     def project_stats(self, project_id: str):
         print("Stats not implemented.")
+
+    def get_project_tree(self, project_id: str):
+        # 1. Try Cache
+        cached = self.cache.get(project_id, "file_tree")
+        if cached:
+            return cached
+            
+        # 2. Build Tree
+        proj = self.datalayer.local.get_project(project_id)
+        if not proj: return "Project not found"
+        
+        tree = []
+        for root, dirs, files in os.walk(proj['path']):
+            level = root.replace(proj['path'], '').count(os.sep)
+            indent = ' ' * 4 * level
+            tree.append(f"{indent}{os.path.basename(root)}/")
+            subindent = ' ' * 4 * (level + 1)
+            for f in files:
+                tree.append(f"{subindent}{f}")
+        
+        tree_str = "\n".join(tree)
+        self.cache.set(project_id, "file_tree", tree_str)
+        return tree_str
 
     # --- INDEX ---
     def index_build(self, project_id: str, type: str = "all", force: bool = False):
@@ -57,39 +84,40 @@ class VoxManager:
 
         print(f"🚀 Building index for {project['name']}...")
 
-        # 1. Clear existing if force
         if force:
             self.datalayer.vector.delete_project_data(project_id)
+            self.cache.invalidate(project_id)
 
-        # 2. Scan Files
+        # Re-cache tree immediately
+        self.get_project_tree(project_id)
+
+        # Scan
         text_chunks, symbols = self.gatherer.scan_project(project['path'])
         
-        # 3. Scan Local Docs (from SQLite)
+        # Local Docs
         local_docs = self.datalayer.local.get_all_documents_for_indexing(project_id)
         for doc in local_docs:
             text_chunks.append({
                 "content": f"Title: {doc.get('title')}\n{doc['content']}",
-                "type": doc['type'], # rule, note
+                "type": doc['type'],
                 "source": "local_db"
             })
 
-        # 4. Embed and Save Symbols
+        # Embed Symbols
         if type in ["all", "symbolic"] and symbols:
             print(f"Embedding {len(symbols)} symbols...")
             sym_embeddings = []
             batch_texts = []
             for s in symbols:
-                # Optimized embedding text: Type + Name + Code snippet
                 batch_texts.append(f"{s.type} {s.name}\n{s.code[:200]}")
             
-            # TODO: Batch embed call to Ollama? For now, loop (slow but simple)
             for txt in batch_texts:
                 sym_embeddings.append(get_ollama_embedding(txt))
 
             self.datalayer.vector.save_symbols(symbols, project_id, sym_embeddings)
             print("✅ Symbols indexed.")
 
-        # 5. Embed and Save Text (MD + Docs)
+        # Embed Text
         if type in ["all", "semantic"] and text_chunks:
             print(f"Embedding {len(text_chunks)} text blocks...")
             text_embeddings = []
@@ -117,11 +145,9 @@ class VoxManager:
                 print(f"Error reading file: {e}")
                 return
 
-        # 1. Save to Local SQLite (Source of Truth)
         doc_id = self.datalayer.local.add_document(project_id, type, final_content, title, from_file)
         print(f"✅ Doc saved locally (ID: {doc_id}).")
 
-        # 2. Sync to Vector DB (Immediate consistency)
         print("Syncing to vector search...")
         text_to_embed = f"Title: {title}\n{final_content}" if title else final_content
         emb = get_ollama_embedding(text_to_embed)
@@ -139,13 +165,9 @@ class VoxManager:
             print(f"[{d['id']}] {d['type'].upper()}: {d['title'] or 'No Title'} (Created: {d['created_at']})")
 
     def docs_get(self, project_id: str, doc_id: str):
-        # Implementation for getting single doc content
         pass
         
     def docs_delete(self, project_id: str, doc_id: str):
-        # Note: This only deletes from SQLite. 
-        # Ideally we need to store a link ID in Postgres to delete the vector too.
-        # For now, this is a known limitation: "Delete" in local doesn't wipe vector immediately without reindex.
         self.datalayer.local.delete_document(int(doc_id))
         print(f"✅ Document {doc_id} deleted locally. Run 'vox index build' to purge from search.")
 
@@ -190,6 +212,21 @@ class VoxManager:
         resp = ollama.chat(model=model or "gemma3:4b-it-qat", messages=[{"role": "user", "content": prompt}])
         print(resp['message']['content'])
         return resp['message']['content']
+    
+    # --- UTILS for Agents ---
+    def get_file_skeleton(self, project_id: str, file_path: str):
+        proj = self.datalayer.local.get_project(project_id)
+        if not proj: return "Project not found"
+        
+        abs_path = os.path.join(proj['path'], file_path)
+        if not os.path.exists(abs_path): return "File not found"
+        
+        try:
+            with open(abs_path, 'r') as f:
+                code = f.read()
+            return TransformerLayer.generate_skeleton(code, file_path)
+        except Exception as e:
+            return f"Error reading file: {e}"
 
     # --- SERVER ---
     def server_start(self):
