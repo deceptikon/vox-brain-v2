@@ -45,7 +45,21 @@ chmod +x "$WRAPPER_PATH"
 
 echo "✅ Installed '$WRAPPER_PATH'"
 
-# 4. Clean up old aliases (legacy cleanup)
+# 4. Setup Zsh Completion
+echo "🐚 Setting up Zsh completion..."
+ZSH_COMP_DIR="$HOME/.local/share/zsh/site-functions"
+mkdir -p "$ZSH_COMP_DIR"
+
+# Generate completion script
+# We pipe it to the file _vox. 
+# Note: Typer generates completion for the script name it sees. 
+# We might need to replace the script name in the generated file if it doesn't match 'vox'.
+COMPLETION_FILE="$ZSH_COMP_DIR/_vox"
+uv run --project "$PROJECT_DIR" vox --show-completion zsh > "$COMPLETION_FILE"
+
+echo "✅ Generated completion at '$COMPLETION_FILE'"
+
+# 5. Clean up old aliases (legacy cleanup)
 SHELL_CONFIG=""
 if [ -f "$HOME/.zshrc" ]; then
     SHELL_CONFIG="$HOME/.zshrc"
@@ -60,11 +74,21 @@ if [ -n "$SHELL_CONFIG" ]; then
     fi
 fi
 
-# 5. Check PATH
-if [[ ":$PATH:" != "::$BIN_DIR:"* ]]; then
+# 6. Check PATH and FPATH
+if [[ ":$PATH:" != ":::$BIN_DIR:"* ]]; then
     echo "⚠️  Warning: $BIN_DIR is not in your PATH."
     echo "   Add this to your shell config ($SHELL_CONFIG):"
     echo "   export PATH=\"$\"$HOME/.local/bin:$PATH\""
 fi
 
-echo "🎉 Done! You can now run 'vox'"
+# Check fpath for Zsh
+if [ -n "$ZSH_VERSION" ] || [[ "$SHELL" == *"zsh"* ]]; then
+    echo "ℹ️  Zsh detected. Ensure fpath includes $ZSH_COMP_DIR"
+    echo "   Add this to your .zshrc BEFORE compinit:"
+    echo "   fpath=(\"
+$HOME/.local/share/zsh/site-functions\" \
+$fpath)"
+    echo "   autoload -U compinit; compinit"
+fi
+
+echo "🎉 Done! You can now run 'vox'. Restart your shell to apply completion."
