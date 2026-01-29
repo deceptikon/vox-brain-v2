@@ -50,12 +50,20 @@ echo "🐚 Setting up Zsh completion..."
 ZSH_COMP_DIR="$HOME/.local/share/zsh/site-functions"
 mkdir -p "$ZSH_COMP_DIR"
 
-# Generate completion script
-# We pipe it to the file _vox. 
-# Note: Typer generates completion for the script name it sees. 
-# We might need to replace the script name in the generated file if it doesn't match 'vox'.
 COMPLETION_FILE="$ZSH_COMP_DIR/_vox"
+# We specifically ask Typer to generate Zsh completion
+# The resulting script defines '_vox_completion' and calls 'compdef _vox_completion vox'
+# BUT: Zsh autoloading expects the file '_vox' to contain the function body directly, or setup.
+# Typer's output is designed to be SOURCED, not autoloaded via fpath usually.
+# However, if we put it in fpath, we need to ensure it has the #compdef tag.
+
+# Let's generate it and inspect/patch it.
 uv run --project "$PROJECT_DIR" vox --show-completion zsh > "$COMPLETION_FILE"
+
+# Patch: Add #compdef at the top if missing (Typer usually adds it)
+if ! grep -q "#compdef vox" "$COMPLETION_FILE"; then
+    sed -i '1i #compdef vox' "$COMPLETION_FILE"
+fi
 
 echo "✅ Generated completion at '$COMPLETION_FILE'"
 
@@ -75,7 +83,7 @@ if [ -n "$SHELL_CONFIG" ]; then
 fi
 
 # 6. Check PATH and FPATH
-if [[ ":$PATH:" != ":::$BIN_DIR:"* ]]; then
+if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
     echo "⚠️  Warning: $BIN_DIR is not in your PATH."
     echo "   Add this to your shell config ($SHELL_CONFIG):"
     echo "   export PATH=\"$\"$HOME/.local/bin:$PATH\""
@@ -83,12 +91,15 @@ fi
 
 # Check fpath for Zsh
 if [ -n "$ZSH_VERSION" ] || [[ "$SHELL" == *"zsh"* ]]; then
-    echo "ℹ️  Zsh detected. Ensure fpath includes $ZSH_COMP_DIR"
-    echo "   Add this to your .zshrc BEFORE compinit:"
-    echo "   fpath=(\"
-$HOME/.local/share/zsh/site-functions\" \
-$fpath)"
-    echo "   autoload -U compinit; compinit"
+    # Create .vox2env if not exists
+    touch "$HOME/.vox2env"
+    
+    echo "ℹ️  Zsh detected. To enable Completion and Aliases:"
+    echo "   1. Add this to your ~/.zshrc (BEFORE compinit):"
+    echo "      fpath=(\"$\"$HOME/.local/share/zsh/site-functions\" \$fpath)"
+    echo "   2. Add this to your ~/.zshrc (anywhere):"
+    echo "      source \$HOME/.vox2env"
+    echo "   3. Run: rm -f ~/.zcompdump; compinit"
 fi
 
-echo "🎉 Done! You can now run 'vox'. Restart your shell to apply completion."
+echo "🎉 Done! Usage: vox <command>"
