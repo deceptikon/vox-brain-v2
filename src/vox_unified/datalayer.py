@@ -2,7 +2,9 @@ import sqlite3
 import psycopg
 import os
 import yaml
+import json
 from pathlib import Path
+
 from typing import List, Optional, Dict, Any
 from pgvector.psycopg import register_vector
 from datetime import datetime
@@ -116,18 +118,14 @@ class LocalMetaStorage:
 # --- Vector Search Layer (Postgres) ---
 class VectorStorage:
     def __init__(self):
-        prefix = "SQL_" # Can be configurable
+        prefix = "SQL_"
         self.dbname = os.getenv(f"{prefix}DATABASE", "tamga_local")
         self.user = os.getenv(f"{prefix}USER", "tamga_user")
         self.password = os.getenv(f"{prefix}PASSWORD", "tamga_pass")
         self.host = os.getenv(f"{prefix}HOST", "localhost")
         self.port = os.getenv(f"{prefix}PORT", "5432")
-        
         self.conn_str = f"dbname={self.dbname} user={self.user} password={self.password} host={self.host} port={self.port}"
-        
-        self.symbols_table = "vox_symbols"
-        self.text_table = "vox_textdata"
-        
+        self.index_table = "vox_index"
         self._init_db()
 
     def _init_db(self):
@@ -135,68 +133,57 @@ class VectorStorage:
             with psycopg.connect(self.conn_str, autocommit=True) as conn:
                 with conn.cursor() as cur:
                     cur.execute("CREATE EXTENSION IF NOT EXISTS vector")
-                    
-                    # 1. Symbols Table (Smart Code)
+                    # Unified Index Table
                     cur.execute(f"""
-                        CREATE TABLE IF NOT EXISTS {self.symbols_table} (
-                            id SERIAL PRIMARY KEY,
-                            project_id TEXT NOT NULL,
-                            name TEXT NOT NULL,
-                            symbol_type TEXT NOT NULL,
-                            code TEXT NOT NULL,
-                            embedding vector(768),
-                            file_path TEXT,
-                            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-                        )
-                    """)
-                    cur.execute(f"CREATE INDEX IF NOT EXISTS {self.symbols_table}_emb_idx ON {self.symbols_table} USING ivfflat (embedding vector_cosine_ops)")
-                    cur.execute(f"CREATE INDEX IF NOT EXISTS {self.symbols_table}_pid_idx ON {self.symbols_table} (project_id)")
-                    
-                    # 2. TextData Table (Smart Docs/Markdown)
-                    cur.execute(f"""
-                        CREATE TABLE IF NOT EXISTS {self.text_table} (
+                        CREATE TABLE IF NOT EXISTS {self.index_table} (
                             id SERIAL PRIMARY KEY,
                             project_id TEXT NOT NULL,
                             content TEXT NOT NULL,
                             embedding vector(768),
-                            source_type TEXT, -- 'markdown', 'rule', 'note'
+                            file_path TEXT,
+                            type TEXT NOT NULL, -- 'symbol', 'markdown', 'rule', 'note'
+                            metadata JSONB DEFAULT '{{}}',
                             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
                         )
                     """)
-                    cur.execute(f"CREATE INDEX IF NOT EXISTS {self.text_table}_emb_idx ON {self.text_table} USING ivfflat (embedding vector_cosine_ops)")
-                    cur.execute(f"CREATE INDEX IF NOT EXISTS {self.text_table}_pid_idx ON {self.text_table} (project_id)")
-                    
+                    cur.execute(f"CREATE INDEX IF NOT EXISTS {self.index_table}_emb_idx ON {self.index_table} USING ivfflat (embedding vector_cosine_ops)")
+                    cur.execute(f"CREATE INDEX IF NOT EXISTS {self.index_table}_pid_idx ON {self.index_table} (project_id)")
+                    cur.execute(f"CREATE INDEX IF NOT EXISTS {self.index_table}_type_idx ON {self.index_table} (type)")
         except Exception as e:
             print(f"⚠️ Warning: Could not initialize Postgres: {e}")
 
-    # --- Symbols ---
-    def save_symbols(self, symbols: List[Symbol], project_id: str, embeddings: List[List[float]]):
+    def save_to_index(self, items: List[Dict[str, Any]], project_id: str, embeddings: List[List[float]]):
+        """Unified save for any indexable content."""
         with psycopg.connect(self.conn_str) as conn:
             register_vector(conn)
             with conn.cursor() as cur:
-                # We don't cleanup here anymore because manager.index_run() handles project-wide cleanup
-                for i, symbol in enumerate(symbols):
+                for i, item in enumerate(items):
                     cur.execute(
                         f"""
-                        INSERT INTO {self.symbols_table} (project_id, name, symbol_type, code, embedding, file_path)
+                        INSERT INTO {self.index_table} (project_id, content, embedding, file_path, type, metadata)
                         VALUES (%s, %s, %s, %s, %s, %s)
                         """,
                         (
-                            project_id, symbol.name, symbol.type.value,
-                            symbol.code, embeddings[i], symbol.file_path
+                            project_id, 
+                            item["content"], 
+                            embeddings[i], 
+                            item.get("file_path"),
+                            item.get("type", "unknown"),
+                            json.dumps(item.get("metadata", {}))
                         )
                     )
 
-    def search_symbols(self, query_text: str, query_embedding: List[float], project_id: Optional[str] = None, limit: int = 10) -> List[SearchResult]:
+    def search(self, query_text: str, query_embedding: List[float], project_id: Optional[str] = None, limit: int = 20) -> List[SearchResult]:
         results = []
         try:
             with psycopg.connect(self.conn_str) as conn:
                 register_vector(conn)
                 with conn.cursor() as cur:
-                    # Hybrid Search: Exact/Partial Name Match + Vector Distance
+                    # Type Weighting: 1 for Rule, 2 for Symbol, 3 for Note/Markdown
+                    # We want lower numbers first or use a CASE statement in ORDER BY
                     sql = f"""
-                    SELECT name, code, file_path, (embedding <=> %s::vector) as distance
-                    FROM {self.symbols_table}
+                    SELECT content, file_path, type, metadata, (embedding <=> %s::vector) as distance
+                    FROM {self.index_table}
                     WHERE 1=1
                     """
                     params = [query_embedding]
@@ -205,86 +192,45 @@ class VectorStorage:
                         sql += " AND project_id = %s"
                         params.append(project_id)
                     
-                    # Add a "keyword boost" order: matches name exactly, then starts with, then vector distance
-                    sql += f"""
+                    # Hybrid Search with Type Priority
+                    sql += """
                     ORDER BY 
-                        (name ILIKE %s) DESC,
-                        (name ILIKE %s) DESC,
+                        (content ILIKE %s) DESC,
+                        (CASE 
+                            WHEN type = 'rule' THEN 1
+                            WHEN type = 'symbol' THEN 2
+                            ELSE 3 
+                         END) ASC,
                         distance ASC
                     LIMIT %s
                     """
-                    params.extend([query_text, f"{query_text}%", limit])
-
-                    cur.execute(sql, params)
-                    rows = cur.fetchall()
-                    
-                    for row in rows:
-                        name, code, fpath, dist = row
-                        results.append(SearchResult(
-                            content=f"Symbol: {name}\nCode:\n{code}",
-                            source=fpath or "symbol",
-                            relevance=1 - dist,
-                            type="symbolic",
-                            metadata={"name": name}
-                        ))
-        except Exception as e:
-            print(f"⚠️ Symbol Search Error: {e}")
-        return results
-
-
-    # --- TextData (Docs/MD) ---
-    def save_text_chunks(self, chunks: List[Dict[str, Any]], project_id: str, embeddings: List[List[float]]):
-        with psycopg.connect(self.conn_str) as conn:
-            register_vector(conn)
-            with conn.cursor() as cur:
-                for i, chunk in enumerate(chunks):
-                    cur.execute(
-                        f"""
-                        INSERT INTO {self.text_table} (project_id, content, embedding, source_type)
-                        VALUES (%s, %s, %s, %s)
-                        """,
-                        (project_id, chunk["content"], embeddings[i], chunk.get("type", "unknown"))
-                    )
-
-    def search_text(self, query_embedding: List[float], project_id: Optional[str] = None, limit: int = 10) -> List[SearchResult]:
-        results = []
-        try:
-            with psycopg.connect(self.conn_str) as conn:
-                register_vector(conn)
-                with conn.cursor() as cur:
-                    sql = f"""
-                    SELECT content, source_type, (embedding <=> %s::vector) as distance
-                    FROM {self.text_table}
-                    WHERE 1=1
-                    """
-                    params = [query_embedding]
-
-                    if project_id:
-                        sql += " AND project_id = %s"
-                        params.append(project_id)
-
-                    sql += " ORDER BY distance ASC LIMIT %s"
-                    params.append(limit)
+                    params.extend([f"%{query_text}%", limit])
 
                     cur.execute(sql, params)
                     for row in cur.fetchall():
-                        content, stype, dist = row
+                        content, fpath, itype, meta, dist = row
+                        
+                        # Extract line info for symbols
+                        source_display = fpath or itype
+                        if itype == 'symbol' and meta.get('start_line') is not None:
+                            source_display = f"{fpath}:{meta['start_line'] + 1}"
+
                         results.append(SearchResult(
                             content=content,
-                            source=stype or "text",
+                            source=source_display,
                             relevance=1 - dist,
-                            type="text",
-                            metadata={}
+                            type=itype,
+                            metadata=meta
                         ))
         except Exception as e:
-            print(f"⚠️ Text Search Error: {e}")
+            print(f"⚠️ Search Error: {e}")
         return results
+
 
     def delete_project_data(self, project_id: str):
         with psycopg.connect(self.conn_str) as conn:
             with conn.cursor() as cur:
-                cur.execute(f"DELETE FROM {self.symbols_table} WHERE project_id = %s", (project_id,))
-                cur.execute(f"DELETE FROM {self.text_table} WHERE project_id = %s", (project_id,))
+                cur.execute(f"DELETE FROM {self.index_table} WHERE project_id = %s", (project_id,))
 
 
 class DataLayer:

@@ -57,10 +57,12 @@ def create_mcp_wrapper(func_name, method, help_text, params_config):
         try:
             result = method(**kwargs)
             if result is not None:
-                return str(result)
+                # FastMCP handles dicts/lists as JSON automatically
+                return result
             return "Command executed successfully."
         except Exception as e:
             return f"Error: {e}"
+
 
     dynamic_func = create_function(sig, wrapper, func_name=func_name, doc=help_text)
     return dynamic_func

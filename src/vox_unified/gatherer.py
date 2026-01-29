@@ -164,31 +164,25 @@ class Gatherer:
             separators=["\n\n", "\n", " ", ""]
         )
 
-    def scan_project(self, root_path: str) -> Tuple[List[Dict[str, Any]], List[Symbol]]:
+    def scan_project(self, root_path: str) -> List[Dict[str, Any]]:
         """
-        Returns:
-            text_chunks: List of dicts {content: str, type: str}
-            symbols: List of Symbol objects
+        Returns a unified list of indexable items.
+        Each item: {content, file_path, type, metadata}
         """
-        text_chunks = []
-        symbols = []
-        
+        items = []
         abs_root = os.path.abspath(root_path)
         print(f"🚀 Scanning project at: {abs_root}")
 
         for dirpath, dirnames, filenames in os.walk(abs_root):
             dirnames[:] = [d for d in dirnames if d not in IGNORE_DIRS]
-            
-            # Skip .cursor directory in scan
-            if '.cursor' in dirpath:
-                continue
+            if '.cursor' in dirpath: continue
 
             for filename in filenames:
                 file_ext = os.path.splitext(filename)[1].lower()
                 full_path = os.path.join(dirpath, filename)
                 relative_path = os.path.relpath(full_path, abs_root)
 
-                # 1. Code Symbols (.py, .ts, .tsx, .js, .jsx)
+                # 1. Code Symbols
                 if file_ext in ['.py', '.ts', '.tsx', '.js', '.jsx']:
                     try:
                         with open(full_path, 'r', encoding='utf-8') as f:
@@ -200,11 +194,28 @@ class Gatherer:
                         else:
                             file_symbols = self.ts_parser.parse_text(content, relative_path)
                             
-                        symbols.extend(file_symbols)
-                    except Exception:
-                        pass
+                        for s in file_symbols:
+                            # SAFETY: Truncate content for embedding if it's too massive
+                            # but we store the full code in the content field.
+                            # Actually, we should store full code, but the embedding text 
+                            # should be representative.
+                            display_content = f"Symbol: {s.name}\nType: {s.type.value}\nCode:\n{s.code}"
+                            
+                            items.append({
+                                "content": display_content,
+                                "file_path": relative_path,
+                                "type": "symbol",
+                                "metadata": {
+                                    "name": s.name,
+                                    "symbol_type": s.type.value,
+                                    "start_line": s.start_line,
+                                    "end_line": s.end_line
+                                }
+                            })
 
-                # 2. Markdown Knowledge (.md)
+                    except Exception: pass
+
+                # 2. Markdown Chunks
                 elif file_ext == '.md':
                     try:
                         with open(full_path, 'r', encoding='utf-8') as f:
@@ -212,24 +223,19 @@ class Gatherer:
                         
                         md_docs = self.md_splitter.split_text(content)
                         for doc in md_docs:
-                            # Check size
+                            # Recursive split if still too large
+                            final_chunks = [doc.page_content]
                             if len(doc.page_content) > 1000:
-                                # Recursively split large chunks
-                                sub_docs = self.recursive_splitter.split_text(doc.page_content)
-                                for sub in sub_docs:
-                                    text_chunks.append({
-                                        "content": sub,
-                                        "type": "markdown",
-                                        "source": relative_path
-                                    })
-                            else:
-                                text_chunks.append({
-                                    "content": doc.page_content,
+                                final_chunks = self.recursive_splitter.split_text(doc.page_content)
+                            
+                            for chunk in final_chunks:
+                                items.append({
+                                    "content": chunk,
+                                    "file_path": relative_path,
                                     "type": "markdown",
-                                    "source": relative_path
+                                    "metadata": doc.metadata
                                 })
-                    except Exception:
-                        pass
+                    except Exception: pass
 
-        print(f"✅ Scan complete: {len(text_chunks)} text blocks, {len(symbols)} symbols.")
-        return text_chunks, symbols
+        print(f"✅ Scan complete: {len(items)} items found.")
+        return items
