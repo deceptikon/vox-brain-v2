@@ -139,7 +139,17 @@ fi
         return "✅ Indexing complete."
 
     # --- SEARCH ---
-    def search_run(self, query: str, project_id: Optional[str] = None, limit: int = 20):
+    def search_run(self, project_id: Optional[str] = None, query: Optional[str] = None, limit: int = 20):
+        # Handle positional swap for convenience: vox search "query" vs vox search $VX0 "query"
+        if query is None:
+            # If only one arg provided, it's the query, and project_id is None
+            query = project_id
+            project_id = None
+        
+        if not query:
+            print("❌ Error: Search query is required.")
+            return
+
         emb = get_ollama_embedding(query, is_query=True)
         
         # 1. Semantic Search

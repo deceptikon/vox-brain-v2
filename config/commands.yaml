@@ -34,6 +34,7 @@ index:
       - name: project_id
         type: string
         required: true
+        description: "The unique ID (or VX alias) of the project."
       - name: force
         type: boolean
         default: false
@@ -43,15 +44,17 @@ search:
   run:
     description: "Perform a hybrid semantic and symbolic search."
     parameters:
+      - name: project_id
+        type: string
+        description: "Optional: Project ID/Alias. If omitted, searches all projects."
       - name: query
         type: string
         required: true
-      - name: project_id
-        type: string
-        description: "Filter results by a specific project."
+        description: "The search query."
       - name: limit
         type: integer
-        default: 10
+        default: 20
+
 
 ask:
   run:

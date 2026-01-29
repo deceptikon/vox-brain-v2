@@ -25,14 +25,26 @@ mkdir -p "$BIN_DIR"
 
 WRAPPER_PATH="$BIN_DIR/vox"
 
-# Create the wrapper script with Smart Fallback
+# Create the wrapper script with Smart Fallback and Semantic Shortcuts
 cat <<EOF > "$WRAPPER_PATH"
 #!/bin/bash
 PROJECT_DIR="$PROJECT_DIR"
 
+# SEMANTIC SHORTCUTS: 
+# If 'vox search' or 'vox ask' is called without 'run', inject it.
+if [[ "\$1" == "search" || "\$1" == "ask" || "\$1" == "index" ]]; then
+    if [[ "\$2" != "run" && "\$2" != "list" && "\$2" != "--help" ]]; then
+        # Shift arguments to inject 'run' at index 2
+        CMD="\$1"
+        shift
+        set -- "\$CMD" "run" "\$@"
+    fi
+fi
+
 # Try running the command
 uv run --project "\$PROJECT_DIR" vox "\$@"
 EXIT_CODE=\$?
+
 
 # If exit code is 2 (Typer usage error)
 # AND we are NOT in completion mode (detected by _VOX_COMPLETE)
