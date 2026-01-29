@@ -26,80 +26,38 @@ mkdir -p "$BIN_DIR"
 WRAPPER_PATH="$BIN_DIR/vox"
 
 # Create the wrapper script with Smart Fallback and Semantic Shortcuts
-
 cat <<EOF > "$WRAPPER_PATH"
-
 #!/bin/bash
-
 PROJECT_DIR="$PROJECT_DIR"
 
-
-
 # SEMANTIC SHORTCUTS: 
-
-# If 'vox search' or 'vox ask' is called without 'run', inject it.
-
-if [[ "\
-" == "search" || "\
-" == "ask" || "\
-" == "index" ]]; then
-
-    if [[ "\$2" != "run" && "\$2" != "list" && "\$2" != "--help" ]]; then
-
-        # Shift arguments to inject 'run' at index 2
-
-        CMD="\
-"
-
-        shift
-
-        set -- "\$CMD" "run" "\$@"
-
+# If 'vox search' or 'vox ask' or 'vox index' is called without a valid subcommand
+if [[ "\$1" == "search" || "\$1" == "ask" || "\$1" == "index" ]]; then
+    if [[ "\$2" != "run" && "\$2" != "list" && "\$2" != "--help" && -n "\$2" ]]; then
+        # Inject 'run' as the second argument
+        set -- "\$1" "run" "\${@:2}"
     fi
-
 fi
-
-
 
 # Try running the command with --quiet to avoid extra info on stdout
-
 uv run --quiet --project "\$PROJECT_DIR" vox "\$@"
-
 EXIT_CODE=\$?
 
-
-
 # If exit code is 2 (Typer usage error)
-
 # AND we are NOT in completion mode (detected by _VOX_COMPLETE)
-
 # AND we are NOT starting the server
-
 if [ -z "\$_VOX_COMPLETE" ] && [[ "\$*" != *"server start"* ]]; then
-
     if [ \$EXIT_CODE -eq 2 ]; then
-
-        # Only show fallback if we actually provided arguments (typo case)
-
-        # If no args were provided, Typer's no_args_is_help=True already handled it.
-
         if [ \$# -gt 0 ]; then
-
             echo -e "\n💡 [VOX Help Fallback]" >&2
-
-            uv run --quiet --project "\$PROJECT_DIR" vox "\$@" --help
-
+            uv run --quiet --project "\$PROJECT_DIR" vox "\$@" --help >&2
         fi
-
     fi
-
 fi
 
-
-
 exit \$EXIT_CODE
-
 EOF
+
 
 
 
