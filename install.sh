@@ -45,27 +45,13 @@ chmod +x "$WRAPPER_PATH"
 
 echo "✅ Installed '$WRAPPER_PATH'"
 
-# 4. Setup Zsh Completion
-echo "🐚 Setting up Zsh completion..."
-ZSH_COMP_DIR="$HOME/.local/share/zsh/site-functions"
-mkdir -p "$ZSH_COMP_DIR"
-
-COMPLETION_FILE="$ZSH_COMP_DIR/_vox"
-# We specifically ask Typer to generate Zsh completion
-# The resulting script defines '_vox_completion' and calls 'compdef _vox_completion vox'
-# BUT: Zsh autoloading expects the file '_vox' to contain the function body directly, or setup.
-# Typer's output is designed to be SOURCED, not autoloaded via fpath usually.
-# However, if we put it in fpath, we need to ensure it has the #compdef tag.
-
-# Let's generate it and inspect/patch it.
-uv run --project "$PROJECT_DIR" vox --show-completion zsh > "$COMPLETION_FILE"
-
-# Patch: Add #compdef at the top if missing (Typer usually adds it)
-if ! grep -q "#compdef vox" "$COMPLETION_FILE"; then
-    sed -i '1i #compdef vox' "$COMPLETION_FILE"
+# 4. Cleanup old completion files that cause Zsh errors
+echo "🧹 Cleaning up legacy completion files..."
+ZSH_COMP_FILE="$HOME/.local/share/zsh/site-functions/_vox"
+if [ -f "$ZSH_COMP_FILE" ]; then
+    rm "$ZSH_COMP_FILE"
+    echo "✅ Removed $ZSH_COMP_FILE"
 fi
-
-echo "✅ Generated completion at '$COMPLETION_FILE'"
 
 # 5. Clean up old aliases (legacy cleanup)
 SHELL_CONFIG=""
@@ -82,24 +68,19 @@ if [ -n "$SHELL_CONFIG" ]; then
     fi
 fi
 
-# 6. Check PATH and FPATH
-if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
+# 6. Generate first version of ~/.vox2env (Aliases + Completion)
+echo "🧬 Generating Aliases and Completion in ~/.vox2env..."
+"$WRAPPER_PATH" project list > /dev/null
+
+# 7. Check PATH and instructions
+if [[ ":$PATH:" != ".*:"$BIN_DIR":"* ]]; then
     echo "⚠️  Warning: $BIN_DIR is not in your PATH."
     echo "   Add this to your shell config ($SHELL_CONFIG):"
-    echo "   export PATH=\"$\"$HOME/.local/bin:$PATH\""
+    echo "   export PATH=\"$HOME/.local/bin:$PATH\""
 fi
 
-# Check fpath for Zsh
-if [ -n "$ZSH_VERSION" ] || [[ "$SHELL" == *"zsh"* ]]; then
-    # Create .vox2env if not exists
-    touch "$HOME/.vox2env"
-    
-    echo "ℹ️  Zsh detected. To enable Completion and Aliases:"
-    echo "   1. Add this to your ~/.zshrc (BEFORE compinit):"
-    echo "      fpath=(\"$\"$HOME/.local/share/zsh/site-functions\" \$fpath)"
-    echo "   2. Add this to your ~/.zshrc (anywhere):"
-    echo "      source \$HOME/.vox2env"
-    echo "   3. Run: rm -f ~/.zcompdump; compinit"
-fi
+echo "ℹ️  To enable VOX features in your shell:"
+echo "   1. Ensure 'source $HOME/.vox2env' is in your ~/.zshenv or ~/.zshrc."
+echo "   2. Restart your shell (or 'exec zsh')."
 
 echo "🎉 Done! Usage: vox <command>"

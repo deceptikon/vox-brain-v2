@@ -56,13 +56,26 @@ class VoxManager:
         # Write to ~/.vox2env
         vox_home = os.environ.get("HOME", "")
         env_path = os.path.join(vox_home, ".vox2env")
+        
+        # Add Completion block to env
+        completion_block = """
+# VOX Zsh Completion
+_vox_completion() {
+  eval $(env _TYPER_COMPLETE_ARGS="${words[1,$CURRENT]}" _VOX_COMPLETE=complete_zsh vox)
+}
+if command -v compdef > /dev/null; then
+  compdef _vox_completion vox
+fi
+"""
         try:
             with open(env_path, "w") as f:
                 f.write("\n".join(env_lines) + "\n")
+                f.write(completion_block)
             lines.append("-" * 80)
-            lines.append(f"ℹ️  Aliases updated in {env_path}. Run 'source {env_path}' to use them.")
+            lines.append(f"ℹ️  Aliases and Completion updated in {env_path}. Run 'source {env_path}' to apply.")
         except Exception as e:
             lines.append(f"⚠️  Failed to write aliases: {e}")
+
 
         output = "\n".join(lines)
         print(output)
