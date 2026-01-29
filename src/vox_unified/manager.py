@@ -235,7 +235,7 @@ fi
 
     # --- SEARCH ---
     def search_semantic(self, query: str, project_id: Optional[str] = None, limit: int = 10):
-        emb = get_ollama_embedding(query)
+        emb = get_ollama_embedding(query, is_query=True)
         results = self.datalayer.vector.search_text(emb, project_id, limit)
         lines = []
         for r in results:
@@ -247,11 +247,14 @@ fi
         return output
 
     def search_symbolic(self, query: str, project_id: Optional[str] = None, limit: int = 10):
-        emb = get_ollama_embedding(query)
+        emb = get_ollama_embedding(query, is_query=True)
         results = self.datalayer.vector.search_symbols(query, emb, project_id, limit)
         lines = []
         for r in results:
-            line = f"- [{r.relevance:.2f}] {r.content.splitlines()[0]}"
+            # Result content for symbols is typically the code snippet.
+            # We want to show the name and path if possible.
+            # Assuming Metadata contains the original symbol info or we parse it from content
+            line = f"- [{r.relevance:.2f}] {r.content.splitlines()[0]} ({r.source})"
             lines.append(line)
             
         output = "\n".join(lines) if lines else "No matches."
@@ -267,9 +270,10 @@ fi
 
     # --- ASK ---
     def ask_question(self, question: str, project_id: str, model: Optional[str] = None, reset_history: bool = False):
-        emb = get_ollama_embedding(question)
+        emb = get_ollama_embedding(question, is_query=True)
         text_hits = self.datalayer.vector.search_text(emb, project_id, 5)
         sym_hits = self.datalayer.vector.search_symbols(question, emb, project_id, 5)
+
         
         context = "### DOCUMENTATION / NOTES\n"
         for t in text_hits:

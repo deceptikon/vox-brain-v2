@@ -5,6 +5,7 @@ from pathlib import Path
 
 # Tree-sitter
 import tree_sitter_python
+import tree_sitter_typescript
 from tree_sitter import Language, Parser as TSParser
 
 # LangChain (Header Splitter Only)
@@ -17,7 +18,11 @@ IGNORE_DIRS = {
     'venv', '.venv', '__pycache__', '.git', '.github', '.vscode', 'tests'
 }
 
-class PythonParser:
+class BaseParser:
+    def _get_text(self, node, code_bytes):
+        return code_bytes[node.start_byte:node.end_byte].decode("utf8", errors="ignore")
+
+class PythonParser(BaseParser):
     def __init__(self):
         try:
             self.PY_LANGUAGE = Language(tree_sitter_python.language())
@@ -37,9 +42,6 @@ class PythonParser:
         self._traverse(tree.root_node, code_bytes, file_path, symbols)
         return symbols
 
-    def _get_text(self, node, code_bytes):
-        return code_bytes[node.start_byte:node.end_byte].decode("utf8", errors="ignore")
-
     def _traverse(self, node, code_bytes, file_path, symbols, parent_name=None):
         symbol = None
         current_name = None
@@ -55,7 +57,7 @@ class PythonParser:
                     start_line=node.start_point[0],
                     end_line=node.end_point[0],
                     code=self._get_text(node, code_bytes),
-                    docstring="", # Extracting docstrings properly requires more logic, omitted for brevity
+                    docstring="",
                     parent=parent_name
                 )
         elif node.type == 'function_definition':
@@ -79,10 +81,76 @@ class PythonParser:
         for child in node.children:
             self._traverse(child, code_bytes, file_path, symbols, parent_name=current_name or parent_name)
 
+class TypeScriptParser(BaseParser):
+    def __init__(self, is_tsx=True):
+        try:
+            lang = tree_sitter_typescript.language_tsx() if is_tsx else tree_sitter_typescript.language_typescript()
+            self.TS_LANGUAGE = Language(lang)
+            self.parser = TSParser(self.TS_LANGUAGE)
+        except Exception:
+            self.parser = None
+
+    def parse_text(self, code: str, file_path: str) -> List[Symbol]:
+        if not self.parser: return []
+        code_bytes = bytes(code, "utf8")
+        try:
+            tree = self.parser.parse(code_bytes)
+        except Exception:
+            return []
+        
+        symbols = []
+        self._traverse(tree.root_node, code_bytes, file_path, symbols)
+        return symbols
+
+    def _traverse(self, node, code_bytes, file_path, symbols, parent_name=None):
+        symbol = None
+        current_name = None
+
+        # Capture Classes, Interfaces, Types, and Functions/Methods
+        if node.type in ['class_declaration', 'interface_declaration', 'type_alias_declaration']:
+            name_node = node.child_by_field_name('name')
+            if name_node:
+                current_name = self._get_text(name_node, code_bytes)
+                stype = SymbolType.CLASS if node.type == 'class_declaration' else SymbolType.OTHER
+                symbol = Symbol(
+                    name=current_name,
+                    type=stype,
+                    file_path=file_path,
+                    start_line=node.start_point[0],
+                    end_line=node.end_point[0],
+                    code=self._get_text(node, code_bytes),
+                    parent=parent_name
+                )
+        elif node.type in ['function_declaration', 'method_definition', 'function_expression', 'arrow_function']:
+            # For methods/functions, finding the name is trickier in TS tree
+            name_node = node.child_by_field_name('name')
+            if not name_node and node.type == 'method_definition':
+                name_node = node.child_by_field_name('name') # Usually works for methods
+            
+            if name_node:
+                current_name = self._get_text(name_node, code_bytes)
+                stype = SymbolType.METHOD if parent_name else SymbolType.FUNCTION
+                symbol = Symbol(
+                    name=current_name,
+                    type=stype,
+                    file_path=file_path,
+                    start_line=node.start_point[0],
+                    end_line=node.end_point[0],
+                    code=self._get_text(node, code_bytes),
+                    parent=parent_name
+                )
+
+        if symbol:
+            symbols.append(symbol)
+
+        for child in node.children:
+            self._traverse(child, code_bytes, file_path, symbols, parent_name=current_name or parent_name)
+
 
 class Gatherer:
     def __init__(self):
         self.py_parser = PythonParser()
+        self.ts_parser = TypeScriptParser(is_tsx=True)
         # Smart Text Splitting: Only split by logical headers
         self.md_splitter = MarkdownHeaderTextSplitter(
             headers_to_split_on=[("#", "H1"), ("##", "H2"), ("###", "H3")]
@@ -108,18 +176,28 @@ class Gatherer:
 
         for dirpath, dirnames, filenames in os.walk(abs_root):
             dirnames[:] = [d for d in dirnames if d not in IGNORE_DIRS]
+            
+            # Skip .cursor directory in scan
+            if '.cursor' in dirpath:
+                continue
 
             for filename in filenames:
-                file_ext = os.path.splitext(filename)[1]
+                file_ext = os.path.splitext(filename)[1].lower()
                 full_path = os.path.join(dirpath, filename)
                 relative_path = os.path.relpath(full_path, abs_root)
 
-                # 1. Code Symbols (.py)
-                if file_ext == '.py':
+                # 1. Code Symbols (.py, .ts, .tsx, .js, .jsx)
+                if file_ext in ['.py', '.ts', '.tsx', '.js', '.jsx']:
                     try:
                         with open(full_path, 'r', encoding='utf-8') as f:
                             content = f.read()
-                        file_symbols = self.py_parser.parse_text(content, relative_path)
+                        
+                        file_symbols = []
+                        if file_ext == '.py':
+                            file_symbols = self.py_parser.parse_text(content, relative_path)
+                        else:
+                            file_symbols = self.ts_parser.parse_text(content, relative_path)
+                            
                         symbols.extend(file_symbols)
                     except Exception:
                         pass

@@ -2,10 +2,17 @@ import json
 import requests
 import sys
 
-def get_ollama_embedding(text: str, model: str = "nomic-embed-text") -> list[float]:
+def get_ollama_embedding(text: str, model: str = "nomic-embed-text", is_query: bool = False) -> list[float]:
     """
     Gets an embedding from the Ollama API.
+    Adds nomic-embed-text specific prefixes if applicable.
     """
+    # Nomic v1.5 prefers prefixes
+    if model == "nomic-embed-text":
+        prefix = "search_query: " if is_query else "search_document: "
+        if not text.startswith(prefix):
+            text = f"{prefix}{text}"
+
     try:
         response = requests.post(
             "http://localhost:11434/api/embeddings",
