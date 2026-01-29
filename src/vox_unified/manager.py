@@ -139,7 +139,7 @@ fi
         return "✅ Indexing complete."
 
     # --- SEARCH ---
-    def search_run(self, query: str, project_id: Optional[str] = None, limit: int = 10):
+    def search_run(self, query: str, project_id: Optional[str] = None, limit: int = 20):
         emb = get_ollama_embedding(query, is_query=True)
         
         # 1. Semantic Search
@@ -149,21 +149,30 @@ fi
         sym_hits = self.datalayer.vector.search_symbols(query, emb, project_id, limit)
         
         # 3. Deduplication and Formatting
-        print("=== Text/Docs ===")
+        print(f"\n[🔍 SEARCH: '{query}']")
+        print("=" * 40)
+        print("📄 TEXT & DOCUMENTS")
+        print("-" * 40)
         seen_text = set()
+        count_text = 0
         for r in text_hits:
             if r.content not in seen_text:
-                print(f"- [{r.relevance:.2f}] {r.content[:150].replace('\n', ' ')}...")
+                print(f"  [{r.relevance:.2f}] {r.content[:160].replace('\n', ' ')}...")
                 seen_text.add(r.content)
+                count_text += 1
 
-        print("\n=== Code/Symbols ===")
+        print("\n🧩 CODE & SYMBOLS")
+        print("-" * 40)
         seen_sym = set()
+        count_sym = 0
         for r in sym_hits:
             if r.content not in seen_sym:
-                print(f"- [{r.relevance:.2f}] {r.content.splitlines()[0]} ({r.source})")
+                print(f"  [{r.relevance:.2f}] {r.content.splitlines()[0]} ({r.source})")
                 seen_sym.add(r.content)
+                count_sym += 1
                 
-        return "Search complete."
+        return f"Found {count_text} text chunks and {count_sym} symbols."
+
 
     # --- ASK ---
     def ask_run(self, question: str, project_id: str, model: Optional[str] = None, reset_history: bool = False):
