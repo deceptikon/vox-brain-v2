@@ -34,14 +34,19 @@ PROJECT_DIR="$PROJECT_DIR"
 uv run --project "\$PROJECT_DIR" vox "\$@"
 EXIT_CODE=\$?
 
-# If exit code is 2 (Typer usage error) or no args provided
+# If exit code is 2 (Typer usage error)
 # AND we are NOT in completion mode (detected by _VOX_COMPLETE)
 if [ -z "\$_VOX_COMPLETE" ]; then
-    if [ \$EXIT_CODE -eq 2 ] || [ \$# -eq 0 ]; then
-        echo -e "\n💡 [VOX Help Fallback]"
-        uv run --project "\$PROJECT_DIR" vox "\$@" --help
+    if [ \$EXIT_CODE -eq 2 ]; then
+        # Only show fallback if we actually provided arguments (typo case)
+        # If no args were provided, Typer's no_args_is_help=True already handled it.
+        if [ \$# -gt 0 ]; then
+            echo -e "\n💡 [VOX Help Fallback]"
+            uv run --project "\$PROJECT_DIR" vox "\$@" --help
+        fi
     fi
 fi
+
 
 exit \$EXIT_CODE
 EOF

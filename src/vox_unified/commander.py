@@ -10,10 +10,11 @@ from vox_unified.manager import VoxManager
 
 # SSoT Constants for Systemic Aliasing
 SYNONYMS = {
-    "run": ["build", "update", "create", "start", "auto", "search"],
-    "list": ["ls", "show", "all"],
-    "delete": ["remove", "rm", "purge"],
+    "run": ["build", "update", "create", "auto"],
+    "list": ["ls"],
+    "delete": ["rm"],
 }
+
 
 def get_app(name: str, help_text: str = ""):
     """Standardized App Factory for consistent behavior."""
@@ -108,7 +109,7 @@ for group_name, commands in COMMANDS_CONFIG.items():
         group_app.command(name=cmd_name)(dynamic_cmd)
         registered_cmds.add(cmd_name)
 
-        # Inject synonyms
+        # Inject synonyms (hidden to keep help clean)
         synonyms = SYNONYMS.get(cmd_name, [])
         for syn in synonyms:
             if syn not in registered_cmds and syn not in commands:
@@ -118,8 +119,9 @@ for group_name, commands in COMMANDS_CONFIG.items():
                     help_text=f"Alias for '{cmd_name}'",
                     params_config=cmd_config.get("parameters", [])
                 )
-                group_app.command(name=syn)(syn_cmd)
+                group_app.command(name=syn, hidden=True)(syn_cmd)
                 registered_cmds.add(syn)
+
 
 def main():
     app()
