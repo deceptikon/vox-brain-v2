@@ -25,21 +25,24 @@ mkdir -p "$BIN_DIR"
 
 WRAPPER_PATH="$BIN_DIR/vox"
 
-# Create the wrapper script
+# Create the wrapper script with Smart Fallback
 cat <<EOF > "$WRAPPER_PATH"
 #!/bin/bash
-# Wrapper for VOX Unified CLI
-
-# Set project directory
 PROJECT_DIR="$PROJECT_DIR"
 
-# If no arguments provided, default to --help
-if [ \$# -eq 0 ]; then
-    exec uv run --project "\$PROJECT_DIR" vox --help
-else
-    exec uv run --project "\$PROJECT_DIR" vox "\$@"
+# Try running the command
+uv run --project "\$PROJECT_DIR" vox "\$@"
+EXIT_CODE=\$?
+
+# If exit code is 2 (Typer usage error) or no args provided
+if [ \$EXIT_CODE -eq 2 ] || [ \$# -eq 0 ]; then
+    echo -e "\n💡 [VOX Help Fallback]"
+    uv run --project "\$PROJECT_DIR" vox "\$@" --help
 fi
+
+exit \$EXIT_CODE
 EOF
+
 
 chmod +x "$WRAPPER_PATH"
 

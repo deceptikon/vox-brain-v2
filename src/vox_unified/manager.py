@@ -94,7 +94,12 @@ fi
         print(msg)
         return msg
 
+    # Alias for intuitive usage
+    def project_build(self, path: str, name: Optional[str] = None):
+        return self.project_create(path, name)
+
     def get_project_tree(self, project_id: str):
+
         # 1. Try Cache
         cached = self.cache.get(project_id, "file_tree")
         if cached:
