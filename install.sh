@@ -17,8 +17,35 @@ cd "$PROJECT_DIR"
 echo "📦 Synchronizing dependencies..."
 uv sync
 
-# 3. Setup CLI Alias (uv run based)
-echo "🔗 Setting up 'vox' alias..."
+# 3. Setup CLI Wrapper in ~/.local/bin
+echo "🔗 Setting up 'vox' executable in ~/.local/bin..."
+
+BIN_DIR="$HOME/.local/bin"
+mkdir -p "$BIN_DIR"
+
+WRAPPER_PATH="$BIN_DIR/vox"
+
+# Create the wrapper script
+cat <<EOF > "$WRAPPER_PATH"
+#!/bin/bash
+# Wrapper for VOX Unified CLI
+
+# Set project directory
+PROJECT_DIR="$PROJECT_DIR"
+
+# If no arguments provided, default to --help
+if [ \$# -eq 0 ]; then
+    exec uv run --project "\$PROJECT_DIR" vox --help
+else
+    exec uv run --project "\$PROJECT_DIR" vox "\$@"
+fi
+EOF
+
+chmod +x "$WRAPPER_PATH"
+
+echo "✅ Installed '$WRAPPER_PATH'"
+
+# 4. Clean up old aliases (legacy cleanup)
 SHELL_CONFIG=""
 if [ -f "$HOME/.zshrc" ]; then
     SHELL_CONFIG="$HOME/.zshrc"
@@ -27,14 +54,17 @@ elif [ -f "$HOME/.bashrc" ]; then
 fi
 
 if [ -n "$SHELL_CONFIG" ]; then
-    # Remove old aliases
-    sed -i '/alias vox=/d' "$SHELL_CONFIG"
-    # New alias uses 'uv run' with explicit project path to work from anywhere
-    echo "alias vox='uv run --project $PROJECT_DIR vox'" >> "$SHELL_CONFIG"
-    echo "✅ Alias added to $SHELL_CONFIG. Run 'source $SHELL_CONFIG' to apply."
-else
-    echo "⚠️ Could not find shell config. Add this manually:"
-    echo "alias vox='uv run --project $PROJECT_DIR vox'"
+    if grep -q "alias vox=" "$SHELL_CONFIG"; then
+        sed -i '/alias vox=/d' "$SHELL_CONFIG"
+        echo "🧹 Removed legacy alias from $SHELL_CONFIG"
+    fi
 fi
 
-echo "🎉 Done! Usage: vox <command>"
+# 5. Check PATH
+if [[ ":$PATH:" != "::$BIN_DIR:"* ]]; then
+    echo "⚠️  Warning: $BIN_DIR is not in your PATH."
+    echo "   Add this to your shell config ($SHELL_CONFIG):"
+    echo "   export PATH=\"$\"$HOME/.local/bin:$PATH\""
+fi
+
+echo "🎉 Done! You can now run 'vox'"

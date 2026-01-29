@@ -17,40 +17,51 @@ class VoxManager:
     def project_create(self, path: str, name: Optional[str] = None):
         abs_path = os.path.abspath(path)
         if not os.path.exists(abs_path):
-            print(f"❌ Error: Path {abs_path} does not exist.")
-            return
+            err = f"❌ Error: Path {abs_path} does not exist."
+            print(err)
+            return err
 
         existing = self.datalayer.local.get_project_by_path(abs_path)
         if existing:
-            print(f"ℹ️ Project already registered: {existing['name']} (ID: {existing['id']})")
+            msg = f"ℹ️ Project already registered: {existing['name']} (ID: {existing['id']})"
+            print(msg)
             return existing['id']
 
         project_id = uuid.uuid4().hex[:16]
         project_name = name or os.path.basename(abs_path)
         
         self.datalayer.local.add_project(project_id, project_name, abs_path)
-        print(f"✅ Project registered: {project_name} (ID: {project_id})")
+        msg = f"✅ Project registered: {project_name} (ID: {project_id})"
+        print(msg)
         return project_id
 
     def project_list(self):
         projects = self.datalayer.local.list_projects()
         if not projects:
-            print("No projects registered.")
-            return
+            msg = "No projects registered."
+            print(msg)
+            return msg
         
-        print(f"{'ID':<20} {'Name':<20} {'Path'}")
-        print("-" * 60)
+        lines = [f"{'ID':<20} {'Name':<20} {'Path'}", "-" * 60]
         for p in projects:
-            print(f"{p['id']:<20} {p['name']:<20} {p['path']}")
+            lines.append(f"{p['id']:<20} {p['name']:<20} {p['path']}")
+        
+        output = "\n".join(lines)
+        print(output)
+        return output
 
     def project_delete(self, project_id: str):
         self.datalayer.local.delete_project(project_id)
         self.datalayer.vector.delete_project_data(project_id)
         self.cache.invalidate(project_id)
-        print(f"✅ Deleted project {project_id}")
+        msg = f"✅ Deleted project {project_id}"
+        print(msg)
+        return msg
 
     def project_stats(self, project_id: str):
-        print("Stats not implemented.")
+        msg = "Stats not implemented."
+        print(msg)
+        return msg
 
     def get_project_tree(self, project_id: str):
         # 1. Try Cache
@@ -79,8 +90,9 @@ class VoxManager:
     def index_build(self, project_id: str, type: str = "all", force: bool = False):
         project = self.datalayer.local.get_project(project_id)
         if not project:
-            print(f"❌ Project {project_id} not found.")
-            return
+            msg = f"❌ Project {project_id} not found."
+            print(msg)
+            return msg
 
         print(f"🚀 Building index for {project['name']}...")
 
@@ -103,6 +115,7 @@ class VoxManager:
                 "source": "local_db"
             })
 
+        output_msgs = []
         # Embed Symbols
         if type in ["all", "symbolic"] and symbols:
             print(f"Embedding {len(symbols)} symbols...")
@@ -115,7 +128,9 @@ class VoxManager:
                 sym_embeddings.append(get_ollama_embedding(txt))
 
             self.datalayer.vector.save_symbols(symbols, project_id, sym_embeddings)
-            print("✅ Symbols indexed.")
+            msg = "✅ Symbols indexed."
+            print(msg)
+            output_msgs.append(msg)
 
         # Embed Text
         if type in ["all", "semantic"] and text_chunks:
@@ -125,16 +140,21 @@ class VoxManager:
                 text_embeddings.append(get_ollama_embedding(chunk["content"]))
             
             self.datalayer.vector.save_text_chunks(text_chunks, project_id, text_embeddings)
-            print("✅ Text data indexed.")
+            msg = "✅ Text data indexed."
+            print(msg)
+            output_msgs.append(msg)
+            
+        return "\n".join(output_msgs)
 
     def index_update(self, project_id: str):
-        self.index_build(project_id, force=False)
+        return self.index_build(project_id, force=False)
 
     # --- DOCS ---
     def docs_add(self, project_id: str, content: Optional[str] = None, from_file: Optional[str] = None, type: str = "note", title: Optional[str] = None):
         if not content and not from_file:
-            print("❌ Must provide content or file.")
-            return
+            msg = "❌ Must provide content or file."
+            print(msg)
+            return msg
 
         final_content = content
         if from_file:
@@ -142,8 +162,9 @@ class VoxManager:
                 with open(from_file, 'r') as f:
                     final_content = f.read()
             except Exception as e:
-                print(f"Error reading file: {e}")
-                return
+                msg = f"Error reading file: {e}"
+                print(msg)
+                return msg
 
         doc_id = self.datalayer.local.add_document(project_id, type, final_content, title, from_file)
         print(f"✅ Doc saved locally (ID: {doc_id}).")
@@ -157,40 +178,61 @@ class VoxManager:
             "type": type
         }
         self.datalayer.vector.save_text_chunks([chunk], project_id, [emb])
-        print("✅ Doc indexed for search.")
+        msg = f"✅ Doc {doc_id} indexed for search."
+        print(msg)
+        return msg
 
     def docs_list(self, project_id: str):
         docs = self.datalayer.local.list_documents(project_id)
+        lines = []
         for d in docs:
-            print(f"[{d['id']}] {d['type'].upper()}: {d['title'] or 'No Title'} (Created: {d['created_at']})")
+            line = f"[{d['id']}] {d['type'].upper()}: {d['title'] or 'No Title'} (Created: {d['created_at']})"
+            lines.append(line)
+        
+        output = "\n".join(lines) if lines else "No docs found."
+        print(output)
+        return output
 
     def docs_get(self, project_id: str, doc_id: str):
         pass
         
     def docs_delete(self, project_id: str, doc_id: str):
         self.datalayer.local.delete_document(int(doc_id))
-        print(f"✅ Document {doc_id} deleted locally. Run 'vox index build' to purge from search.")
+        msg = f"✅ Document {doc_id} deleted locally. Run 'vox index build' to purge from search."
+        print(msg)
+        return msg
 
     # --- SEARCH ---
     def search_semantic(self, query: str, project_id: Optional[str] = None, limit: int = 10):
         emb = get_ollama_embedding(query)
         results = self.datalayer.vector.search_text(emb, project_id, limit)
+        lines = []
         for r in results:
-            print(f"- [{r.relevance:.2f}] {r.content[:100]}...")
-        return results
+            line = f"- [{r.relevance:.2f}] {r.content[:100]}..."
+            lines.append(line)
+        
+        output = "\n".join(lines) if lines else "No matches."
+        print(output)
+        return output
 
     def search_symbolic(self, query: str, project_id: Optional[str] = None, limit: int = 10):
         emb = get_ollama_embedding(query)
         results = self.datalayer.vector.search_symbols(query, emb, project_id, limit)
+        lines = []
         for r in results:
-            print(f"- [{r.relevance:.2f}] {r.content.splitlines()[0]}")
-        return results
+            line = f"- [{r.relevance:.2f}] {r.content.splitlines()[0]}"
+            lines.append(line)
+            
+        output = "\n".join(lines) if lines else "No matches."
+        print(output)
+        return output
 
     def search_auto(self, query: str, project_id: Optional[str] = None):
         print("=== Text/Docs ===")
-        self.search_semantic(query, project_id, 5)
+        res1 = self.search_semantic(query, project_id, 5)
         print("\n=== Code/Symbols ===")
-        self.search_symbolic(query, project_id, 5)
+        res2 = self.search_symbolic(query, project_id, 5)
+        return f"=== SEMANTIC ===\n{res1}\n\n=== SYMBOLIC ===\n{res2}"
 
     # --- ASK ---
     def ask_question(self, question: str, project_id: str, model: Optional[str] = None, reset_history: bool = False):
@@ -210,8 +252,9 @@ class VoxManager:
         
         import ollama
         resp = ollama.chat(model=model or "gemma3:4b-it-qat", messages=[{"role": "user", "content": prompt}])
-        print(resp['message']['content'])
-        return resp['message']['content']
+        answer = resp['message']['content']
+        print(answer)
+        return answer
     
     # --- UTILS for Agents ---
     def get_file_skeleton(self, project_id: str, file_path: str):
