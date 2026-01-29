@@ -2,11 +2,14 @@ import os
 import uuid
 import json
 import sys
+import logging
 from typing import Optional, List, Dict, Any
 from vox_unified.gatherer import Gatherer
 from vox_unified.datalayer import DataLayer
 from vox_unified.embeddings import get_ollama_embedding
 from vox_unified.middleware import CacheLayer, TransformerLayer
+
+logger = logging.getLogger("vox-manager")
 
 class VoxManager:
     def __init__(self):
@@ -19,13 +22,13 @@ class VoxManager:
         abs_path = os.path.abspath(path)
         if not os.path.exists(abs_path):
             err = f"❌ Error: Path {abs_path} does not exist."
-            print(err, file=sys.stderr)
+            logger.error(err)
             return err
 
         existing = self.datalayer.local.get_project_by_path(abs_path)
         if existing:
             msg = f"ℹ️ Project already registered: {existing['name']} (ID: {existing['id']})"
-            print(msg, file=sys.stderr)
+            logger.info(msg)
             return existing['id']
 
         project_id = uuid.uuid4().hex[:16]
@@ -33,14 +36,14 @@ class VoxManager:
         
         self.datalayer.local.add_project(project_id, project_name, abs_path)
         msg = f"✅ Project registered: {project_name} (ID: {project_id})"
-        print(msg, file=sys.stderr)
+        logger.info(msg)
         return project_id
 
     def project_list(self):
         projects = self.datalayer.local.list_projects()
         if not projects:
             msg = "No projects registered."
-            print(msg, file=sys.stderr)
+            logger.info(msg)
             return msg
         
         projects.sort(key=lambda x: x['name'])
@@ -247,6 +250,10 @@ fi
             return TransformerLayer.generate_skeleton(f.read(), file_path)
 
     # --- SERVER ---
-    def server_start(self):
+    def server_start(self, verbose: bool = False):
         from vox_unified.mcpserver import run
-        run()
+        if verbose:
+            print("🚀 Starting VOX Unified MCP Server in VERBOSE mode...", file=sys.stderr)
+        else:
+            print("🚀 Starting VOX Unified MCP Server...", file=sys.stderr)
+        run(verbose=verbose)

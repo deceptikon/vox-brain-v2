@@ -135,5 +135,18 @@ def onboard_prompt(project_id: str) -> str:
     """
 
 
-def run():
+import logging
+import sys
+
+def run(verbose: bool = False):
+    log_level = logging.DEBUG if verbose else logging.INFO
+    logging.basicConfig(
+        level=log_level,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        stream=sys.stderr
+    )
+    # FastMCP might have its own logger, we can set it too
+    logging.getLogger("mcp").setLevel(log_level)
+    
     mcp.run()
+

@@ -96,5 +96,17 @@ docs:
         required: true
 
 server:
+
   start:
+
     description: "Start the MCP (Model Context Protocol) server."
+
+    parameters:
+
+      - name: verbose
+
+        type: boolean
+
+        default: false
+
+        description: "Enable detailed debug logging to stderr."

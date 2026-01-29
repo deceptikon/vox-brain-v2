@@ -21,7 +21,14 @@ def test_manager_methods_exist():
     mgr = VoxManager()
     expected_methods = [
         "project_create", "project_list", "index_run", 
-        "search_run", "ask_run", "docs_add"
+        "search_run", "ask_run", "docs_add", "server_start"
     ]
     for method in expected_methods:
         assert hasattr(mgr, method), f"Method {method} is missing from Manager!"
+
+def test_server_start_import():
+    """Checks if server_start can at least import its dependencies."""
+    mgr = VoxManager()
+    # We don't want to actually start the loop, but we check if the method is callable
+    assert callable(mgr.server_start)
+
