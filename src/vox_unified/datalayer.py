@@ -235,6 +235,23 @@ class VectorStorage:
             with conn.cursor() as cur:
                 cur.execute(f"DELETE FROM {self.index_table} WHERE project_id = %s", (project_id,))
 
+    def get_stats(self, project_id: str) -> Dict[str, int]:
+        """Returns counts of items by type for the project."""
+        stats = {}
+        try:
+            with psycopg.connect(self.conn_str) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        f"SELECT type, COUNT(*) FROM {self.index_table} WHERE project_id = %s GROUP BY type",
+                        (project_id,)
+                    )
+                    for itype, count in cur.fetchall():
+                        stats[itype] = count
+        except Exception as e:
+            print(f"⚠️ Stats Error: {e}", file=sys.stderr)
+        return stats
+
+
 
 class DataLayer:
     def __init__(self):

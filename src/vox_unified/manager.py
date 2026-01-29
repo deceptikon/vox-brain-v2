@@ -102,7 +102,32 @@ fi
         return msg
 
     def project_stats(self, project_id: str):
-        return "Stats not implemented yet."
+        project = self.datalayer.local.get_project(project_id)
+        if not project:
+            msg = f"❌ Project {project_id} not found."
+            print(msg, file=sys.stderr)
+            return msg
+
+        stats = self.datalayer.vector.get_stats(project_id)
+        
+        lines = [
+            f"\n📊 STATISTICS: {project['name']} ({project_id})",
+            "=" * 50
+        ]
+        
+        if not stats:
+            lines.append("  No data indexed yet.")
+        else:
+            total = sum(stats.values())
+            for itype, count in sorted(stats.items()):
+                lines.append(f"  {itype.upper():<12} : {count:>5}")
+            lines.append("-" * 50)
+            lines.append(f"  TOTAL ITEMS  : {total:>5}")
+        
+        output = "\n".join(lines)
+        print(output, file=sys.stderr)
+        return output
+
 
     # --- INDEX ---
     def index_run(self, project_id: str, force: bool = False):
