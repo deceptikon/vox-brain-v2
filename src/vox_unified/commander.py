@@ -8,14 +8,11 @@ from makefun import create_function
 
 from vox_unified.manager import VoxManager
 
-# SSoT Constants
+# SSoT Constants for Systemic Aliasing
 SYNONYMS = {
-    "create": ["build", "add", "init", "new"],
-    "build": ["create", "add", "init"],
+    "run": ["build", "update", "create", "start", "auto", "search"],
     "list": ["ls", "show", "all"],
     "delete": ["remove", "rm", "purge"],
-    "search": ["find", "query"],
-    "ask": ["question", "chat"]
 }
 
 def get_app(name: str, help_text: str = ""):
@@ -44,11 +41,8 @@ TYPE_MAP = {
 }
 
 def resolve_manager_method(group: str, cmd: str):
-    """
-    Systemically resolves a manager method using semantic synonyms.
-    Example: 'index create' -> tries manager.index_create, then manager.index_build.
-    """
-    # 1. Direct match
+    """Systemically resolves a manager method using semantic synonyms."""
+    # 1. Direct match (e.g., search_run)
     direct_name = f"{group}_{cmd}"
     if hasattr(manager, direct_name):
         return getattr(manager, direct_name)
@@ -98,15 +92,11 @@ for group_name, commands in COMMANDS_CONFIG.items():
     group_app = get_app(group_name, f"Manage {group_name}")
     app.add_typer(group_app, name=group_name)
     
-    # Track registered commands to avoid duplicates
     registered_cmds = set()
 
     for cmd_name, cmd_config in commands.items():
-        # Smart Resolution
         method = resolve_manager_method(group_name, cmd_name)
-        
-        if not method:
-            continue
+        if not method: continue
             
         # Register the main command
         dynamic_cmd = create_command_wrapper(
@@ -118,20 +108,18 @@ for group_name, commands in COMMANDS_CONFIG.items():
         group_app.command(name=cmd_name)(dynamic_cmd)
         registered_cmds.add(cmd_name)
 
-        # SYSTEMIC ALIASING: Register synonyms as hidden/extra commands
+        # Inject synonyms
         synonyms = SYNONYMS.get(cmd_name, [])
         for syn in synonyms:
             if syn not in registered_cmds and syn not in commands:
-                # Reuse the same wrapper/method but with a different name
                 syn_cmd = create_command_wrapper(
                     func_name=syn,
                     method=method,
-                    help_text=f"Alias for '{cmd_name}': {cmd_config.get('description', '')}",
+                    help_text=f"Alias for '{cmd_name}'",
                     params_config=cmd_config.get("parameters", [])
                 )
                 group_app.command(name=syn)(syn_cmd)
                 registered_cmds.add(syn)
-
 
 def main():
     app()

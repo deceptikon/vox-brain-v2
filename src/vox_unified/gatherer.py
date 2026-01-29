@@ -15,8 +15,10 @@ from vox_unified.models import Symbol, SymbolType, Document
 
 IGNORE_DIRS = {
     'node_modules', '.next', 'dist', 'build', '.vercel',
-    'venv', '.venv', '__pycache__', '.git', '.github', '.vscode', 'tests'
+    'venv', '.venv', '__pycache__', '.git', '.github', '.vscode', 'tests',
+    'staticfiles', 'static', 'vendor', 'public', 'assets', 'locales'
 }
+
 
 class BaseParser:
     def _get_text(self, node, code_bytes):

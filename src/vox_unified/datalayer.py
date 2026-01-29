@@ -174,10 +174,7 @@ class VectorStorage:
         with psycopg.connect(self.conn_str) as conn:
             register_vector(conn)
             with conn.cursor() as cur:
-                # Cleanup old symbols for this project?
-                # For full re-index, yes. For incremental, maybe not.
-                # Here we assume append or external cleanup.
-                
+                # We don't cleanup here anymore because manager.index_run() handles project-wide cleanup
                 for i, symbol in enumerate(symbols):
                     cur.execute(
                         f"""
@@ -196,6 +193,7 @@ class VectorStorage:
             with psycopg.connect(self.conn_str) as conn:
                 register_vector(conn)
                 with conn.cursor() as cur:
+                    # Hybrid Search: Exact/Partial Name Match + Vector Distance
                     sql = f"""
                     SELECT name, code, file_path, (embedding <=> %s::vector) as distance
                     FROM {self.symbols_table}
@@ -207,9 +205,15 @@ class VectorStorage:
                         sql += " AND project_id = %s"
                         params.append(project_id)
                     
-                    # Name matching boost could be added here similar to previous logic
-                    sql += " ORDER BY distance ASC LIMIT %s"
-                    params.append(limit)
+                    # Add a "keyword boost" order: matches name exactly, then starts with, then vector distance
+                    sql += f"""
+                    ORDER BY 
+                        (name ILIKE %s) DESC,
+                        (name ILIKE %s) DESC,
+                        distance ASC
+                    LIMIT %s
+                    """
+                    params.extend([query_text, f"{query_text}%", limit])
 
                     cur.execute(sql, params)
                     rows = cur.fetchall()
@@ -226,6 +230,7 @@ class VectorStorage:
         except Exception as e:
             print(f"⚠️ Symbol Search Error: {e}")
         return results
+
 
     # --- TextData (Docs/MD) ---
     def save_text_chunks(self, chunks: List[Dict[str, Any]], project_id: str, embeddings: List[List[float]]):
