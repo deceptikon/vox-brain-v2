@@ -1,7 +1,9 @@
 import os
 import yaml
+import sys
 from typing import List, Tuple, Optional, Dict, Any
 from pathlib import Path
+
 
 # Tree-sitter
 import tree_sitter_python
@@ -171,9 +173,10 @@ class Gatherer:
         """
         items = []
         abs_root = os.path.abspath(root_path)
-        print(f"🚀 Scanning project at: {abs_root}")
+        print(f"🚀 Scanning project at: {abs_root}", file=sys.stderr)
 
         for dirpath, dirnames, filenames in os.walk(abs_root):
+
             dirnames[:] = [d for d in dirnames if d not in IGNORE_DIRS]
             if '.cursor' in dirpath: continue
 
@@ -237,5 +240,5 @@ class Gatherer:
                                 })
                     except Exception: pass
 
-        print(f"✅ Scan complete: {len(items)} items found.")
+        print(f"✅ Scan complete: {len(items)} items found.", file=sys.stderr)
         return items

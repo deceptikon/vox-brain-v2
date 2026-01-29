@@ -3,13 +3,14 @@ import psycopg
 import os
 import yaml
 import json
+import sys
 from pathlib import Path
-
 from typing import List, Optional, Dict, Any
 from pgvector.psycopg import register_vector
 from datetime import datetime
 
 from vox_unified.models import Symbol, Document, SearchResult
+
 
 # Load Config
 CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "storage.yaml"
@@ -150,9 +151,10 @@ class VectorStorage:
                     cur.execute(f"CREATE INDEX IF NOT EXISTS {self.index_table}_pid_idx ON {self.index_table} (project_id)")
                     cur.execute(f"CREATE INDEX IF NOT EXISTS {self.index_table}_type_idx ON {self.index_table} (type)")
         except Exception as e:
-            print(f"⚠️ Warning: Could not initialize Postgres: {e}")
+            print(f"⚠️ Warning: Could not initialize Postgres: {e}", file=sys.stderr)
 
     def save_to_index(self, items: List[Dict[str, Any]], project_id: str, embeddings: List[List[float]]):
+
         """Unified save for any indexable content."""
         with psycopg.connect(self.conn_str) as conn:
             register_vector(conn)
@@ -223,8 +225,9 @@ class VectorStorage:
                             metadata=meta
                         ))
         except Exception as e:
-            print(f"⚠️ Search Error: {e}")
+            print(f"⚠️ Search Error: {e}", file=sys.stderr)
         return results
+
 
 
     def delete_project_data(self, project_id: str):

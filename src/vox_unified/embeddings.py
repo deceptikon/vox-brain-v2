@@ -24,13 +24,14 @@ def get_ollama_embedding(text: str, model: str = "nomic-embed-text", is_query: b
         response.raise_for_status()
         return response.json()["embedding"]
     except requests.exceptions.HTTPError as e:
-        print(f"❌ HTTP Error {e.response.status_code}: {e.response.text}")
+        print(f"❌ HTTP Error {e.response.status_code}: {e.response.text}", file=sys.stderr)
         # Only print snippet if verbose logging is needed, or keep it for safety
-        print(f"   Text Length: {len(text)} chars")
+        print(f"   Text Length: {len(text)} chars", file=sys.stderr)
         sys.exit(1)
     except requests.exceptions.ConnectionError:
-        print(f"❌ Error: Cannot connect to Ollama server at http://localhost:11434")
+        print(f"❌ Error: Cannot connect to Ollama server at http://localhost:11434", file=sys.stderr)
         sys.exit(1)
     except Exception as e:
-        print(f"❌ Error getting Ollama embedding: {e}")
+        print(f"❌ Error getting Ollama embedding: {e}", file=sys.stderr)
         sys.exit(1)
+
