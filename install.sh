@@ -35,13 +35,17 @@ uv run --project "\$PROJECT_DIR" vox "\$@"
 EXIT_CODE=\$?
 
 # If exit code is 2 (Typer usage error) or no args provided
-if [ \$EXIT_CODE -eq 2 ] || [ \$# -eq 0 ]; then
-    echo -e "\n💡 [VOX Help Fallback]"
-    uv run --project "\$PROJECT_DIR" vox "\$@" --help
+# AND we are NOT in completion mode (detected by _VOX_COMPLETE)
+if [ -z "\$_VOX_COMPLETE" ]; then
+    if [ \$EXIT_CODE -eq 2 ] || [ \$# -eq 0 ]; then
+        echo -e "\n💡 [VOX Help Fallback]"
+        uv run --project "\$PROJECT_DIR" vox "\$@" --help
+    fi
 fi
 
 exit \$EXIT_CODE
 EOF
+
 
 
 chmod +x "$WRAPPER_PATH"

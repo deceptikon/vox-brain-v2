@@ -61,12 +61,30 @@ class VoxManager:
         completion_block = """
 # VOX Zsh Completion
 _vox_completion() {
-  eval $(env _TYPER_COMPLETE_ARGS="${words[1,$CURRENT]}" _VOX_COMPLETE=complete_zsh vox)
+  local -a completions
+  local -a response
+  # Set COMP_WORDS and COMP_CWORD for Click's internal parser
+  response=("${(@f)$(env COMP_WORDS="${words[*]}" COMP_CWORD=$((CURRENT-1)) _VOX_COMPLETE=complete_zsh vox)}")
+  
+  for type key descr in ${response}; do
+    if [[ "$type" == "plain" ]]; then
+      if [[ "$descr" == "_" ]]; then
+        completions+=("$key")
+      else
+        completions+=("$key:$descr")
+      fi
+    fi
+  done
+
+  if [ -n "$completions" ]; then
+    _describe -V unsorted completions -U
+  fi
 }
 if command -v compdef > /dev/null; then
   compdef _vox_completion vox
 fi
 """
+
         try:
             with open(env_path, "w") as f:
                 f.write("\n".join(env_lines) + "\n")
