@@ -28,7 +28,12 @@ TYPE_MAP = {
 
 def create_mcp_wrapper(func_name, method, help_text, params_config):
     parameters = []
-    for param in params_config:
+    
+    # SYSTEMIC FIX: Required arguments must come before default arguments in Python signatures.
+    # We sort the config to ensure correct order.
+    sorted_params = sorted(params_config, key=lambda x: not x.get("required", False))
+
+    for param in sorted_params:
         name = param["name"].replace("-", "_")
         p_type_str = param.get("type", "string")
         py_type = TYPE_MAP.get(p_type_str, str)
@@ -52,6 +57,7 @@ def create_mcp_wrapper(func_name, method, help_text, params_config):
         parameters.append(param_obj)
 
     sig = inspect.Signature(parameters)
+
 
     async def wrapper(**kwargs):
         try:
@@ -104,7 +110,7 @@ def get_tree(project_id: str) -> str:
 @mcp.prompt("onboard")
 def onboard_prompt(project_id: str) -> str:
     """
-    Helps an Agent understand the project structure and rules immediately.
+    Guides an Agent to understand the project structure, rules, and how to use VOX tools.
     """
     tree = manager.get_project_tree(project_id)
     # Get rules from SQLite
@@ -113,18 +119,21 @@ def onboard_prompt(project_id: str) -> str:
     rules_text = "\n".join(rules) if rules else "No specific rules defined."
     
     return f"""
-    You are onboarding to Project ID: {project_id}.
+    You are onboarding to Project ID: {project_id}. 
     
-    ### PROJECT STRUCTURE
-    {tree}
-    
+    ### STRATEGY FOR CONTEXT
+    1.  **Search First**: Use 'search_run' to find relevant code or docs.
+    2.  **Locate Source**: Every search result contains a 'source' (file path). 
+    3.  **Read Deep**: Don't rely on search snippets alone. Use 'vox://{project_id}/skeleton/<path>' to see the file structure, or use your standard file-reading tools to read the actual file at the 'source' path.
+    4.  **Follow Rules**: Adhere to the project rules listed below.
+
     ### PROJECT RULES
     {rules_text}
-    
-    ### INSTRUCTIONS
-    1. Use 'search_symbolic' to find code definitions.
-    2. Use 'vox://{project_id}/skeleton/path/to/file' to read file interfaces.
+
+    ### PROJECT STRUCTURE
+    {tree}
     """
+
 
 def run():
     mcp.run()

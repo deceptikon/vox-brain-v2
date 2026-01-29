@@ -60,7 +60,11 @@ def resolve_manager_method(group: str, cmd: str):
 def create_command_wrapper(func_name, method, help_text, params_config):
     """Generates a Typer-compatible function with correct metadata."""
     parameters = []
-    for param in params_config:
+    
+    # SYSTEMIC FIX: Required arguments must come before default arguments.
+    sorted_params = sorted(params_config, key=lambda x: not x.get("required", False))
+
+    for param in sorted_params:
         name = param["name"].replace("-", "_")
         p_type_str = param.get("type", "string")
         py_type = TYPE_MAP.get(p_type_str, str)
@@ -83,6 +87,7 @@ def create_command_wrapper(func_name, method, help_text, params_config):
         parameters.append(param_obj)
 
     sig = inspect.Signature(parameters)
+
     def wrapper(**kwargs):
         return method(**kwargs)
 
