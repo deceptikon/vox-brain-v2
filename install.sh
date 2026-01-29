@@ -40,13 +40,18 @@ if [[ "\$1" == "search" || "\$1" == "ask" || "\$1" == "index" ]]; then
 fi
 
 # Try running the command with --quiet to avoid extra info on stdout
-uv run --quiet --project "\$PROJECT_DIR" vox "\$@"
-EXIT_CODE=\$?
+# For 'server start', we MUST NOT have anything on stdout except MCP protocol
+if [[ "\$*" == *"server start"* ]]; then
+    # Run the server directly, ensuring no shell noise
+    exec uv run --quiet --project "\$PROJECT_DIR" vox "\$@"
+else
+    uv run --quiet --project "\$PROJECT_DIR" vox "\$@"
+    EXIT_CODE=\$?
+fi
 
 # If exit code is 2 (Typer usage error)
 # AND we are NOT in completion mode (detected by _VOX_COMPLETE)
-# AND we are NOT starting the server
-if [ -z "\$_VOX_COMPLETE" ] && [[ "\$*" != *"server start"* ]]; then
+if [ -z "\$_VOX_COMPLETE" ]; then
     if [ \$EXIT_CODE -eq 2 ]; then
         if [ \$# -gt 0 ]; then
             echo -e "\n💡 [VOX Help Fallback]" >&2
@@ -54,6 +59,7 @@ if [ -z "\$_VOX_COMPLETE" ] && [[ "\$*" != *"server start"* ]]; then
         fi
     fi
 fi
+
 
 exit \$EXIT_CODE
 EOF

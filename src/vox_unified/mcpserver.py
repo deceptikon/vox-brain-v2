@@ -59,6 +59,8 @@ def create_mcp_wrapper(func_name, method, help_text, params_config):
     sig = inspect.Signature(parameters)
 
 
+import traceback
+
     async def wrapper(**kwargs):
         try:
             result = method(**kwargs)
@@ -67,7 +69,11 @@ def create_mcp_wrapper(func_name, method, help_text, params_config):
                 return result
             return "Command executed successfully."
         except Exception as e:
+            # Log the full traceback to stderr so we can debug without breaking JSON-RPC
+            print(f"🔥 MCP Tool Error in {func_name}: {e}", file=sys.stderr)
+            traceback.print_exc(file=sys.stderr)
             return f"Error: {e}"
+
 
 
     dynamic_func = create_function(sig, wrapper, func_name=func_name, doc=help_text)
