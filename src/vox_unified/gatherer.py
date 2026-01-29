@@ -8,7 +8,7 @@ import tree_sitter_python
 from tree_sitter import Language, Parser as TSParser
 
 # LangChain (Header Splitter Only)
-from langchain_text_splitters import MarkdownHeaderTextSplitter
+from langchain_text_splitters import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
 
 from vox_unified.models import Symbol, SymbolType, Document
 
@@ -87,6 +87,12 @@ class Gatherer:
         self.md_splitter = MarkdownHeaderTextSplitter(
             headers_to_split_on=[("#", "H1"), ("##", "H2"), ("###", "H3")]
         )
+        # Safety Splitter: For massive blocks (logs, huge code blocks) that defy headers
+        self.recursive_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1000,
+            chunk_overlap=200,
+            separators=["\n\n", "\n", " ", ""]
+        )
 
     def scan_project(self, root_path: str) -> Tuple[List[Dict[str, Any]], List[Symbol]]:
         """
@@ -126,13 +132,22 @@ class Gatherer:
                         
                         md_docs = self.md_splitter.split_text(content)
                         for doc in md_docs:
-                            # We preserve the logical chunk (content)
-                            # We might want to prepend title context if available
-                            text_chunks.append({
-                                "content": doc.page_content,
-                                "type": "markdown",
-                                "source": relative_path
-                            })
+                            # Check size
+                            if len(doc.page_content) > 1000:
+                                # Recursively split large chunks
+                                sub_docs = self.recursive_splitter.split_text(doc.page_content)
+                                for sub in sub_docs:
+                                    text_chunks.append({
+                                        "content": sub,
+                                        "type": "markdown",
+                                        "source": relative_path
+                                    })
+                            else:
+                                text_chunks.append({
+                                    "content": doc.page_content,
+                                    "type": "markdown",
+                                    "source": relative_path
+                                })
                     except Exception:
                         pass
 
