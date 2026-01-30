@@ -1,8 +1,6 @@
 import os
-import yaml
 import sys
-from typing import List, Tuple, Optional, Dict, Any
-from pathlib import Path
+from typing import List, Dict, Any
 
 
 # Tree-sitter
@@ -13,7 +11,7 @@ from tree_sitter import Language, Parser as TSParser
 # LangChain (Header Splitter Only)
 from langchain_text_splitters import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
 
-from vox_unified.models import Symbol, SymbolType, Document
+from vox_unified.models import Symbol, SymbolType
 
 IGNORE_DIRS = {
     'node_modules', '.next', 'dist', 'build', '.vercel',

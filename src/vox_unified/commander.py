@@ -1,8 +1,7 @@
-import os
 import yaml
 import inspect
 import typer
-from typing import Optional, Any
+from typing import Optional
 from pathlib import Path
 from makefun import create_function
 

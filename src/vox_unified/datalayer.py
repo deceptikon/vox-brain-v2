@@ -7,9 +7,8 @@ import sys
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 from pgvector.psycopg import register_vector
-from datetime import datetime
 
-from vox_unified.models import Symbol, Document, SearchResult
+from vox_unified.models import SearchResult
 
 
 # Load Config

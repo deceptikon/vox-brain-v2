@@ -1,6 +1,9 @@
 import os
 import yaml
 import inspect
+import traceback
+import sys
+import logging
 from pathlib import Path
 from typing import Optional, Any
 from mcp.server.fastmcp import FastMCP
@@ -23,12 +26,12 @@ TYPE_MAP = {
     "string": str,
     "integer": int,
     "boolean": bool,
-    "array": list 
+    "array": list
 }
 
 def create_mcp_wrapper(func_name, method, help_text, params_config):
     parameters = []
-    
+
     # SYSTEMIC FIX: Required arguments must come before default arguments in Python signatures.
     # We sort the config to ensure correct order.
     sorted_params = sorted(params_config, key=lambda x: not x.get("required", False))
@@ -37,10 +40,10 @@ def create_mcp_wrapper(func_name, method, help_text, params_config):
         name = param["name"].replace("-", "_")
         p_type_str = param.get("type", "string")
         py_type = TYPE_MAP.get(p_type_str, str)
-        
+
         default_val = param.get("default")
         is_required = param.get("required", False)
-        
+
         if not is_required:
             annotation = Optional[py_type]
             default = default_val
@@ -57,9 +60,6 @@ def create_mcp_wrapper(func_name, method, help_text, params_config):
         parameters.append(param_obj)
 
     sig = inspect.Signature(parameters)
-
-
-import traceback
 
     async def wrapper(**kwargs):
         try:
@@ -87,18 +87,18 @@ for group_name, commands in COMMANDS_CONFIG.items():
     for cmd_name, cmd_config in commands.items():
         tool_name = f"{group_name}_{cmd_name}"
         method_name = f"{group_name}_{cmd_name}"
-        
+
         if not hasattr(manager, method_name): continue
-            
+
         method = getattr(manager, method_name)
-        
+
         wrapper = create_mcp_wrapper(
             func_name=tool_name,
             method=method,
             help_text=cmd_config.get("description", ""),
             params_config=cmd_config.get("parameters", [])
         )
-        
+
         mcp.tool(name=tool_name)(wrapper)
 
 # --- MCP Resources & Prompts ---
@@ -123,13 +123,13 @@ def onboard_prompt(project_id: str) -> str:
     docs = manager.datalayer.local.list_documents(project_id)
     rules = [d['content'] for d in docs if d['type'] == 'rule']
     rules_text = "\n".join(rules) if rules else "No specific rules defined."
-    
+
     return f"""
-    You are onboarding to Project ID: {project_id}. 
-    
+    You are onboarding to Project ID: {project_id}.
+
     ### STRATEGY FOR CONTEXT
     1.  **Search First**: Use 'search_run' to find relevant code or docs.
-    2.  **Locate Source**: Every search result contains a 'source' (file path). 
+    2.  **Locate Source**: Every search result contains a 'source' (file path).
     3.  **Read Deep**: Don't rely on search snippets alone. Use 'vox://{project_id}/skeleton/<path>' to see the file structure, or use your standard file-reading tools to read the actual file at the 'source' path.
     4.  **Follow Rules**: Adhere to the project rules listed below.
 
@@ -141,8 +141,7 @@ def onboard_prompt(project_id: str) -> str:
     """
 
 
-import logging
-import sys
+
 
 def run(verbose: bool = False):
     log_level = logging.DEBUG if verbose else logging.INFO
@@ -153,6 +152,5 @@ def run(verbose: bool = False):
     )
     # FastMCP might have its own logger, we can set it too
     logging.getLogger("mcp").setLevel(log_level)
-    
-    mcp.run()
 
+    mcp.run()

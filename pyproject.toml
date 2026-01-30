@@ -23,6 +23,7 @@ dependencies = [
     "python-dotenv>=1.0.1",
     "makefun>=1.15.0",
     "aiofiles>=25.1.0",
+    "ruff>=0.14.14",
 ]
 
 [project.scripts]

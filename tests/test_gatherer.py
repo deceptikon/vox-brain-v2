@@ -1,4 +1,3 @@
-import pytest
 from vox_unified.gatherer import Gatherer, PythonParser
 
 def test_python_parser_extracts_symbols():
